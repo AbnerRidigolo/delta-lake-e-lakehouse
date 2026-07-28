@@ -1,0 +1,30 @@
+# ---------------------------------------------------------------------------
+# Dependencias do Data Lakehouse (Python 3.10+)
+#
+# Instalacao:
+#   python -m venv .venv && source .venv/bin/activate
+#   pip install -r requirements.txt
+#
+# Observacao: no Databricks Community Edition o Spark e o Delta ja vem
+# instalados no cluster. Nesse caso instale apenas o bloco "ML / AI".
+# ---------------------------------------------------------------------------
+
+# --- Engine + formato de tabela -------------------------------------------
+pyspark==3.5.3
+delta-spark==3.2.1
+
+# --- Manipulacao de dados / utilitarios -----------------------------------
+pandas>=2.0.0
+numpy>=1.24.0
+pyarrow>=14.0.0
+PyYAML>=6.0
+
+# --- ML / Feature Store ----------------------------------------------------
+scikit-learn>=1.3.0
+joblib>=1.3.0
+# xgboost e opcional: o treinador cai automaticamente para o
+# HistGradientBoostingClassifier do scikit-learn se ele nao estiver presente.
+# xgboost>=2.0.0
+
+# --- Orquestracao (opcional, apenas para rodar o DAG de verdade) -----------
+# apache-airflow==2.9.3

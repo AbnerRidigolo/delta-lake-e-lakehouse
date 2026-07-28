@@ -1,0 +1,152 @@
+# ===========================================================================
+# GOVERNANCA COMO CODIGO (Data Catalog declarativo)
+#
+# Este arquivo e a fonte da verdade dos metadados do lakehouse. Ele descreve
+# dominio, owner, classificacao de dados (PII/LGPD), SLA e descricao de cada
+# tabela. O script `src/governance/apply_catalog_metadata.py` le este YAML e
+# aplica COMMENT + TBLPROPERTIES nas tabelas Delta.
+#
+# Em um ambiente Databricks, o mesmo YAML alimentaria o Unity Catalog
+# (GRANT/COMMENT/TAGS); em um ambiente open source, alimentaria o DataHub via
+# a API de ingestao. Ver docs/governance.md.
+# ===========================================================================
+
+catalog: fintech
+
+classifications:
+  PUBLIC: "Pode ser exposto em dashboards e relatorios externos."
+  INTERNAL: "Uso interno, sem dado pessoal identificavel."
+  CONFIDENTIAL: "Dado de negocio sensivel (financeiro, risco)."
+  PII: "Dado pessoal - LGPD. Requer mascaramento e acesso restrito."
+
+domains:
+  customer:   { owner: "squad-customer-360",  steward: "data-governance" }
+  payments:   { owner: "squad-payments",      steward: "data-governance" }
+  credit:     { owner: "squad-credit-risk",   steward: "risk-office" }
+  finance:    { owner: "squad-fpna",          steward: "controladoria" }
+  ml:         { owner: "squad-ml-platform",   steward: "data-governance" }
+
+tables:
+  # ------------------------------ BRONZE ----------------------------------
+  - name: bronze.customers
+    layer: bronze
+    domain: customer
+    classification: PII
+    description: "Cadastro bruto de clientes ingerido do CSV operacional, sem tratamento."
+    sla_hours: 24
+    pii_columns: [full_name, cpf, email, phone, birth_date]
+
+  - name: bronze.merchants
+    layer: bronze
+    domain: payments
+    classification: INTERNAL
+    description: "Cadastro bruto de estabelecimentos credenciados."
+    sla_hours: 24
+    pii_columns: []
+
+  - name: bronze.transactions
+    layer: bronze
+    domain: payments
+    classification: CONFIDENTIAL
+    description: "Transacoes brutas (batch + streaming), particionadas por data de ingestao."
+    sla_hours: 1
+    pii_columns: [ip_address, device_id]
+
+  - name: bronze.credit_contracts
+    layer: bronze
+    domain: credit
+    classification: CONFIDENTIAL
+    description: "Contratos de credito brutos (emprestimo pessoal, cartao, consignado, BNPL)."
+    sla_hours: 24
+    pii_columns: []
+
+  # ------------------------------ SILVER ----------------------------------
+  - name: silver.customers
+    layer: silver
+    domain: customer
+    classification: PII
+    description: "Clientes deduplicados, normalizados e validados. CPF e e-mail mascarados."
+    sla_hours: 24
+    pii_columns: [full_name, cpf_masked, email_masked]
+
+  - name: silver.merchants
+    layer: silver
+    domain: payments
+    classification: INTERNAL
+    description: "Estabelecimentos normalizados e enriquecidos com categoria de MCC."
+    sla_hours: 24
+    pii_columns: []
+
+  - name: silver.transactions
+    layer: silver
+    domain: payments
+    classification: CONFIDENTIAL
+    description: "Transacoes limpas, tipadas, deduplicadas e enriquecidas com cliente e merchant."
+    sla_hours: 1
+    pii_columns: []
+
+  - name: silver.credit_contracts
+    layer: silver
+    domain: credit
+    classification: CONFIDENTIAL
+    description: "Contratos de credito tipados, com faixa de atraso e provisao calculada."
+    sla_hours: 24
+    pii_columns: []
+
+  # ------------------------------- GOLD -----------------------------------
+  - name: gold.customer_360
+    layer: gold
+    domain: customer
+    classification: CONFIDENTIAL
+    description: "Visao unica do cliente: RFM, exposicao de credito, inadimplencia, churn e score agregado."
+    sla_hours: 24
+    pii_columns: []
+
+  - name: gold.transaction_fraud_signals
+    layer: gold
+    domain: payments
+    classification: CONFIDENTIAL
+    description: "Transacoes com sinais de fraude por regra (velocity, valor atipico, madrugada, device novo)."
+    sla_hours: 1
+    pii_columns: []
+
+  - name: gold.credit_risk_portfolio
+    layer: gold
+    domain: credit
+    classification: CONFIDENTIAL
+    description: "Carteira de credito por safra/produto com EAD, PD proxy, LGD e perda esperada."
+    sla_hours: 24
+    pii_columns: []
+
+  - name: gold.financial_kpis_daily
+    layer: gold
+    domain: finance
+    classification: CONFIDENTIAL
+    description: "KPIs financeiros diarios: receita (MDR + juros), perdas, recuperacao, chargeback e aprovacao."
+    sla_hours: 6
+    pii_columns: []
+
+  - name: gold.merchant_performance
+    layer: gold
+    domain: payments
+    classification: INTERNAL
+    description: "Desempenho e risco por estabelecimento: TPV, ticket medio, taxa de chargeback e de fraude."
+    sla_hours: 24
+    pii_columns: []
+
+  # -------------------------- FEATURE STORE -------------------------------
+  - name: feature_store.customer_features
+    layer: feature_store
+    domain: ml
+    classification: CONFIDENTIAL
+    description: "Features de cliente com timestamp de referencia para treino point-in-time."
+    sla_hours: 24
+    pii_columns: []
+
+  - name: feature_store.transaction_features
+    layer: feature_store
+    domain: ml
+    classification: CONFIDENTIAL
+    description: "Features transacionais para o modelo de deteccao de fraude."
+    sla_hours: 1
+    pii_columns: []

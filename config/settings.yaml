@@ -1,0 +1,106 @@
+# ===========================================================================
+# Configuracao central do Lakehouse
+#
+# Tudo que e "ambiente" (caminhos, tamanhos, parametros de negocio) mora aqui,
+# para que o codigo dos jobs fique limpo e portavel entre local / Databricks.
+# Os caminhos podem ser sobrescritos pela variavel de ambiente LAKEHOUSE_ROOT.
+# ===========================================================================
+
+project:
+  name: "fintech-lakehouse"
+  # Nome logico do "catalogo" (equivalente ao catalog do Unity Catalog).
+  catalog: "fintech"
+  environment: "local"          # local | databricks
+  timezone: "America/Sao_Paulo"
+
+# --- Camadas fisicas do lakehouse -----------------------------------------
+# Em local: diretorios. Em cloud: s3://.../bronze, abfss://..., etc.
+paths:
+  root: "data"
+  raw: "data/raw"
+  bronze: "data/bronze"
+  silver: "data/silver"
+  gold: "data/gold"
+  feature_store: "data/feature_store"
+  quality: "data/quality"
+  vector_store: "data/vector_store"
+  checkpoints: "data/_checkpoints"
+  artifacts: "artifacts"
+  reports: "reports"
+
+# --- Spark ----------------------------------------------------------------
+spark:
+  app_name: "fintech-lakehouse"
+  master: "local[*]"
+  shuffle_partitions: 8         # baixo de proposito: dataset local e pequeno
+  driver_memory: "4g"
+  configs:
+    spark.sql.session.timeZone: "America/Sao_Paulo"
+    spark.databricks.delta.optimizeWrite.enabled: "true"
+    spark.databricks.delta.autoCompact.enabled: "true"
+    # Permite VACUUM com retencao curta na demo (NUNCA usar em producao)
+    spark.databricks.delta.retentionDurationCheck.enabled: "false"
+    spark.sql.legacy.timeParserPolicy: "CORRECTED"
+
+# --- Geracao de dados sinteticos ------------------------------------------
+data_generation:
+  seed: 42
+  n_customers: 5000
+  n_merchants: 400
+  n_transactions: 250000
+  n_credit_contracts: 6500
+  # Janela historica dos eventos (a data final e "hoje" logico do projeto)
+  start_date: "2024-01-01"
+  end_date: "2024-12-31"
+  # Proporcao de fraude real na base (bem desbalanceado, como na vida real)
+  fraud_rate: 0.012
+  # Percentual de registros "sujos" injetados de proposito para a camada Silver
+  # ter o que limpar (nulos, duplicatas, tipos errados, categorias bagunçadas).
+  dirty_rate: 0.03
+  # Micro-lotes usados para simular o streaming de transacoes
+  streaming_batches: 8
+  streaming_events_per_batch: 1500
+
+# --- Regras de negocio usadas nas camadas Silver/Gold ---------------------
+business_rules:
+  # Cliente sem transacao ha mais de N dias e considerado churn
+  churn_inactivity_days: 60
+  # Faixas de atraso (dias) para a visao de inadimplencia
+  delinquency_buckets: [0, 15, 30, 60, 90, 180]
+  # Contrato com atraso >= N dias entra em default (Basileia usa 90)
+  default_days_past_due: 90
+  # Percentual do saldo em atraso provisionado por faixa (proxy de PDD/ECL)
+  provision_rates:
+    current: 0.005
+    dpd_1_15: 0.02
+    dpd_16_30: 0.05
+    dpd_31_60: 0.15
+    dpd_61_90: 0.35
+    dpd_91_180: 0.70
+    dpd_180_plus: 1.00
+  # Limiares das regras heuristicas de fraude (camada Gold)
+  fraud_rules:
+    high_amount_brl: 5000.0
+    velocity_window_minutes: 10
+    velocity_max_transactions: 5
+    night_hour_start: 0
+    night_hour_end: 5
+    max_distinct_devices_24h: 3
+
+# --- Machine Learning ------------------------------------------------------
+ml:
+  target_column: "is_fraud"
+  test_size: 0.25
+  random_state: 42
+  # Colunas que NAO podem entrar no modelo (vazamento ou identificadores)
+  leakage_columns: ["transaction_id", "customer_id", "merchant_id", "event_ts", "fraud_score_rule"]
+
+# --- Camada de IA generativa / RAG ----------------------------------------
+ai:
+  # Embeddings locais (TF-IDF + SVD) para o projeto rodar sem chave de API.
+  embedding_dim: 256
+  chunk_max_chars: 900
+  top_k: 4
+  # Provider do LLM: "mock" (offline, deterministico) ou "anthropic"
+  llm_provider: "mock"
+  llm_model: "claude-opus-5"

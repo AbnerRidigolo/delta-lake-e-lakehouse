@@ -14,8 +14,6 @@ Databricks/notebook), ela e reutilizada.
 
 from __future__ import annotations
 
-from typing import Optional
-
 from pyspark.sql import SparkSession
 
 from src.common.config import Settings, get_settings
@@ -29,7 +27,7 @@ def _running_on_databricks(spark: SparkSession) -> bool:
     return spark.conf.get("spark.databricks.clusterUsageTags.clusterName", None) is not None
 
 
-def get_spark(app_suffix: Optional[str] = None, settings: Optional[Settings] = None) -> SparkSession:
+def get_spark(app_suffix: str | None = None, settings: Settings | None = None) -> SparkSession:
     """Cria (ou reaproveita) a SparkSession do projeto.
 
     Args:

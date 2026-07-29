@@ -31,7 +31,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from pyspark.sql import Column, DataFrame, SparkSession
 from pyspark.sql import functions as F
@@ -56,8 +56,8 @@ class Expectation:
 
     name: str
     kind: str
-    column: Optional[str] = None
-    params: Dict[str, Any] = field(default_factory=dict)
+    column: str | None = None
+    params: dict[str, Any] = field(default_factory=dict)
     severity: str = SEVERITY_ERROR
     # Tolerancia: fracao maxima de linhas que pode violar a regra (0 = zero tolerancia)
     threshold: float = 0.0
@@ -67,35 +67,57 @@ class Expectation:
 # Construtores de expectativas (acucar sintatico para deixar os jobs legiveis)
 # ---------------------------------------------------------------------------
 
+
 def not_null(column: str, severity: str = SEVERITY_ERROR, threshold: float = 0.0) -> Expectation:
-    return Expectation(f"not_null::{column}", "not_null", column, severity=severity, threshold=threshold)
+    return Expectation(
+        f"not_null::{column}", "not_null", column, severity=severity, threshold=threshold
+    )
 
 
 def unique(column: str, severity: str = SEVERITY_ERROR) -> Expectation:
     return Expectation(f"unique::{column}", "unique", column, severity=severity)
 
 
-def allowed_values(column: str, values: List[Any], severity: str = SEVERITY_ERROR,
-                   threshold: float = 0.0) -> Expectation:
+def allowed_values(
+    column: str, values: list[Any], severity: str = SEVERITY_ERROR, threshold: float = 0.0
+) -> Expectation:
     return Expectation(
-        f"allowed_values::{column}", "allowed_values", column,
-        {"values": values}, severity=severity, threshold=threshold,
+        f"allowed_values::{column}",
+        "allowed_values",
+        column,
+        {"values": values},
+        severity=severity,
+        threshold=threshold,
     )
 
 
-def between(column: str, minimum: float, maximum: float, severity: str = SEVERITY_ERROR,
-            threshold: float = 0.0) -> Expectation:
+def between(
+    column: str,
+    minimum: float,
+    maximum: float,
+    severity: str = SEVERITY_ERROR,
+    threshold: float = 0.0,
+) -> Expectation:
     return Expectation(
-        f"between::{column}", "between", column,
-        {"min": minimum, "max": maximum}, severity=severity, threshold=threshold,
+        f"between::{column}",
+        "between",
+        column,
+        {"min": minimum, "max": maximum},
+        severity=severity,
+        threshold=threshold,
     )
 
 
-def matches_regex(column: str, pattern: str, severity: str = SEVERITY_WARN,
-                  threshold: float = 0.0) -> Expectation:
+def matches_regex(
+    column: str, pattern: str, severity: str = SEVERITY_WARN, threshold: float = 0.0
+) -> Expectation:
     return Expectation(
-        f"regex::{column}", "regex", column, {"pattern": pattern},
-        severity=severity, threshold=threshold,
+        f"regex::{column}",
+        "regex",
+        column,
+        {"pattern": pattern},
+        severity=severity,
+        threshold=threshold,
     )
 
 
@@ -114,7 +136,8 @@ def freshness_max_days(column: str, max_days: int, severity: str = SEVERITY_WARN
 # Motor de execucao
 # ---------------------------------------------------------------------------
 
-def _violation_condition(exp: Expectation) -> Optional[Column]:
+
+def _violation_condition(exp: Expectation) -> Column | None:
     """Traduz uma expectativa row-level em uma condicao booleana de violacao."""
     col = F.col(exp.column) if exp.column else None
 
@@ -133,7 +156,7 @@ def run_quality_checks(
     spark: SparkSession,
     df: DataFrame,
     dataset: str,
-    expectations: List[Expectation],
+    expectations: list[Expectation],
     persist: bool = True,
     raise_on_error: bool = True,
 ) -> DataFrame:
@@ -146,7 +169,7 @@ def run_quality_checks(
     """
     df = df.cache()
     total_rows = df.count()
-    results: List[Dict[str, Any]] = []
+    results: list[dict[str, Any]] = []
 
     # ---- 1) Checagens row-level: uma unica passada com varios agregados -----
     row_level = [(e, _violation_condition(e)) for e in expectations]
@@ -179,8 +202,13 @@ def run_quality_checks(
         elif exp.kind == "row_count_min":
             violations = 0 if total_rows >= exp.params["min"] else 1
             results.append(
-                _build_result(exp, dataset, total_rows, violations,
-                              detail=f"linhas={total_rows}, minimo={exp.params['min']}")
+                _build_result(
+                    exp,
+                    dataset,
+                    total_rows,
+                    violations,
+                    detail=f"linhas={total_rows}, minimo={exp.params['min']}",
+                )
             )
 
         elif exp.kind == "freshness":
@@ -195,7 +223,9 @@ def run_quality_checks(
 
     df.unpersist()
 
-    result_df = spark.createDataFrame(results) if results else spark.createDataFrame([], _empty_schema())
+    result_df = (
+        spark.createDataFrame(results) if results else spark.createDataFrame([], _empty_schema())
+    )
     _log_results(dataset, results)
 
     if persist and results:
@@ -217,10 +247,15 @@ def run_quality_checks(
     return result_df
 
 
-def _build_result(exp: Expectation, dataset: str, total_rows: int, violations: int,
-                  detail: str = "") -> Dict[str, Any]:
+def _build_result(
+    exp: Expectation, dataset: str, total_rows: int, violations: int, detail: str = ""
+) -> dict[str, Any]:
     ratio = (violations / total_rows) if total_rows else 0.0
-    passed = ratio <= exp.threshold if exp.kind not in ("row_count_min", "freshness") else violations == 0
+    passed = (
+        ratio <= exp.threshold
+        if exp.kind not in ("row_count_min", "freshness")
+        else violations == 0
+    )
     return {
         "run_id": PIPELINE_RUN_ID,
         "checked_at": datetime.now(timezone.utc).replace(tzinfo=None),
@@ -239,35 +274,50 @@ def _build_result(exp: Expectation, dataset: str, total_rows: int, violations: i
 
 
 def _empty_schema():
-    from pyspark.sql.types import (BooleanType, DoubleType, LongType, StringType,
-                                   StructField, StructType, TimestampType)
+    from pyspark.sql.types import (
+        BooleanType,
+        DoubleType,
+        LongType,
+        StringType,
+        StructField,
+        StructType,
+        TimestampType,
+    )
 
-    return StructType([
-        StructField("run_id", StringType()),
-        StructField("checked_at", TimestampType()),
-        StructField("dataset", StringType()),
-        StructField("expectation", StringType()),
-        StructField("kind", StringType()),
-        StructField("column", StringType()),
-        StructField("severity", StringType()),
-        StructField("total_rows", LongType()),
-        StructField("violations", LongType()),
-        StructField("violation_ratio", DoubleType()),
-        StructField("threshold", DoubleType()),
-        StructField("passed", BooleanType()),
-        StructField("detail", StringType()),
-    ])
+    return StructType(
+        [
+            StructField("run_id", StringType()),
+            StructField("checked_at", TimestampType()),
+            StructField("dataset", StringType()),
+            StructField("expectation", StringType()),
+            StructField("kind", StringType()),
+            StructField("column", StringType()),
+            StructField("severity", StringType()),
+            StructField("total_rows", LongType()),
+            StructField("violations", LongType()),
+            StructField("violation_ratio", DoubleType()),
+            StructField("threshold", DoubleType()),
+            StructField("passed", BooleanType()),
+            StructField("detail", StringType()),
+        ]
+    )
 
 
 def _as_date(value):
     return value.date() if hasattr(value, "date") else value
 
 
-def _log_results(dataset: str, results: List[Dict[str, Any]]) -> None:
+def _log_results(dataset: str, results: list[dict[str, Any]]) -> None:
     for res in results:
-        status = "PASS" if res["passed"] else ("FAIL" if res["severity"] == SEVERITY_ERROR else "WARN")
+        status = (
+            "PASS" if res["passed"] else ("FAIL" if res["severity"] == SEVERITY_ERROR else "WARN")
+        )
         log.info(
             "DQ %-4s | %-24s | %-28s | violacoes=%s/%s %s",
-            status, dataset, res["expectation"], res["violations"], res["total_rows"],
+            status,
+            dataset,
+            res["expectation"],
+            res["violations"],
+            res["total_rows"],
             res["detail"],
         )

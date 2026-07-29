@@ -6,6 +6,9 @@
 [![Airflow](https://img.shields.io/badge/Airflow-2.9-017CEE?logo=apacheairflow&logoColor=white)](https://airflow.apache.org/)
 [![scikit-learn](https://img.shields.io/badge/scikit--learn-1.x-F7931E?logo=scikitlearn&logoColor=white)](https://scikit-learn.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![CI](https://github.com/AbnerRidigolo/delta-lake-e-lakehouse/actions/workflows/ci.yml/badge.svg)](https://github.com/AbnerRidigolo/delta-lake-e-lakehouse/actions/workflows/ci.yml)
+[![Qualidade de dados](https://github.com/AbnerRidigolo/delta-lake-e-lakehouse/actions/workflows/data-quality.yml/badge.svg)](https://github.com/AbnerRidigolo/delta-lake-e-lakehouse/actions/workflows/data-quality.yml)
+[![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 
 > **Pipeline de dados ponta a ponta de uma fintech ficticia**: ingestao batch e
 > streaming, arquitetura Medallion sobre Delta Lake, tabelas Gold para risco de
@@ -29,7 +32,9 @@
 - [Recursos do Delta Lake demonstrados](#-recursos-do-delta-lake-demonstrados)
 - [Machine Learning](#-machine-learning)
 - [Engenharia de IA (RAG)](#-engenharia-de-ia-rag)
-- [Governanca e qualidade](#-governanca-e-qualidade)
+- [Qualidade de dados](#-qualidade-de-dados)
+- [CI/CD](#-cicd)
+- [Governanca](#-governanca)
 - [Decisoes de engenharia](#-decisoes-de-engenharia)
 - [O que mudaria em producao](#-o-que-mudaria-em-producao)
 - [Documentacao](#-documentacao)
@@ -70,7 +75,7 @@ Este projeto implementa essa arquitetura inteira, do dado sintetico ao RAG.
 | 2 | **Ingestao batch + streaming** escrevendo na *mesma* tabela Delta | `src/bronze/` |
 | 3 | **Arquitetura Medallion** completa (Bronze / Silver / Gold) | `src/bronze/`, `src/silver/`, `src/gold/` |
 | 4 | **5 tabelas Gold** de negocio: cliente 360, sinais de fraude, carteira de credito, KPIs financeiros e performance de lojistas | `src/gold/` |
-| 5 | **Framework de Data Quality** com quarentena de registros rejeitados | `src/common/data_quality.py` |
+| 5 | **Qualidade de dados em 6 camadas**: constraints Delta, expectativas, conciliacao entre camadas, contratos de schema, drift (PSI) e scorecard com portao | `src/quality/`, `src/common/data_quality.py` |
 | 6 | **Feature Store** com correcao point-in-time | `src/ml/feature_store.py` |
 | 7 | **Modelo de fraude** com split temporal, PR-AUC e ponto de operacao escolhido por custo | `src/ml/train_fraud_model.py` |
 | 8 | **Relatorio analitico automatico** gerado a partir dos fatos da Gold | `src/ai/insight_generator.py` |
@@ -78,6 +83,7 @@ Este projeto implementa essa arquitetura inteira, do dado sintetico ao RAG.
 | 10 | **Orquestracao**: runner Python + DAG do Airflow gerado do mesmo grafo | `orchestration/` |
 | 11 | **Governanca como codigo**: catalogo declarativo, LGPD, geracao do setup de Unity Catalog | `src/governance/` |
 | 12 | **Manutencao Delta**: OPTIMIZE, Z-ORDER, VACUUM + demo de time travel, MERGE e RESTORE | `src/maintenance/` |
+| 13 | **CI/CD**: o pipeline INTEIRO roda a cada PR com portao de qualidade; monitoramento diario que abre issue ao reprovar | `.github/workflows/` |
 
 ---
 
@@ -155,7 +161,8 @@ O detalhamento das decisoes esta em **[`docs/architecture.md`](docs/architecture
 | ML | **scikit-learn** (XGBoost opcional) | Gradient boosting e o estado da arte para tabular |
 | IA generativa | **TF-IDF + SVD** local, adaptador para **Anthropic** | Roda offline; trocar por um provider real e mudar uma classe |
 | Governanca | **YAML declarativo** -> `TBLPROPERTIES` / **Unity Catalog** | Catalogo versionado no Git, aplicado pelo pipeline |
-| Qualidade | Framework proprio (~250 linhas) | Expectativas por tabela + quarentena, resultados persistidos em Delta |
+| Qualidade | Framework proprio + constraints Delta | 6 camadas: constraints, expectativas, conciliacao, contratos, drift (PSI) e scorecard |
+| CI/CD | **GitHub Actions** + **ruff** + pre-commit | O pipeline inteiro roda a cada PR, com portao de qualidade |
 
 **Onde roda:** maquina local (Spark em `local[*]`), Databricks Community Edition
 ou qualquer cluster Spark. Zero dependencia de servico pago.
@@ -256,9 +263,18 @@ spark.sql("""
 
 ```
 delta-lake-e-lakehouse/
+├── .github/
+│   ├── workflows/
+│   │   ├── ci.yml                       # lint + testes + pipeline + portao de qualidade
+│   │   └── data-quality.yml             # monitoramento diario, abre issue ao reprovar
+│   └── dependabot.yml
+│
 ├── config/
-│   ├── settings.yaml                    # caminhos, Spark, regras de negocio, ML, IA
+│   ├── settings.yaml                    # caminhos, Spark, regras de negocio, ML, IA, qualidade
+│   ├── settings.ci.yaml                 # overlay do perfil CI (so o volume muda)
 │   └── catalog.yaml                     # catalogo declarativo (governanca como codigo)
+│
+├── contracts/                           # schemas congelados (versionados no Git)
 │
 ├── src/
 │   ├── common/                          # base compartilhada
@@ -300,6 +316,14 @@ delta-lake-e-lakehouse/
 │   │   ├── insight_generator.py         # extracao de fatos + relatorio Markdown
 │   │   └── rag_pipeline.py              # chunking, embeddings, retrieval, LLM
 │   │
+│   ├── quality/                         # qualidade de dados avancada
+│   │   ├── constraints.py               # CHECK constraints do Delta
+│   │   ├── expectations.py              # FK, chave composta, agregados, SQL
+│   │   ├── reconciliation.py            # linhas e valores entre camadas
+│   │   ├── schema_contract.py           # BREAKING vs. ADDITIVE
+│   │   ├── drift.py                     # volume + PSI
+│   │   └── scorecard.py                 # nota consolidada + portao
+│   │
 │   ├── governance/
 │   │   └── apply_catalog_metadata.py    # YAML -> TBLPROPERTIES + docs + UC SQL
 │   │
@@ -323,6 +347,8 @@ delta-lake-e-lakehouse/
 │   └── generated/                       # catalogo e SQL do Unity Catalog (gerados)
 │
 ├── tests/test_pipeline.py               # testes das regras criticas
+├── pyproject.toml                       # ruff + pytest
+├── .pre-commit-config.yaml
 │
 ├── data/                                # camadas do lakehouse (geradas, fora do Git)
 │   ├── raw/ bronze/ silver/ gold/
@@ -532,7 +558,7 @@ system prompt que proibe estimar numeros fora do contexto.
 
 ---
 
-## 🛡 Governanca e qualidade
+## 🛡 Governanca
 
 ### Catalogo declarativo
 
@@ -559,16 +585,145 @@ desatualizado.
 Direito ao esquecimento com Delta e uma operacao, nao um projeto:
 `DELETE FROM ... WHERE customer_id = ...` seguido de `VACUUM`.
 
-### Data Quality
-
-Framework proprio com 7 tipos de expectativa (`not_null`, `unique`,
-`allowed_values`, `between`, `regex`, `row_count_min`, `freshness`), severidade
-(`error` derruba o pipeline, `warn` registra) e tolerancia configuravel.
-
-Os resultados sao persistidos em `data/quality/dq_results` — o que permite montar
-um **painel historico de qualidade** em vez de so um log que ninguem le.
-
 Detalhes em **[`docs/governance.md`](docs/governance.md)**.
+
+---
+
+## 🔬 Qualidade de dados
+
+Quase todo pipeline tem `not_null` e `unique` em algumas colunas e chama isso de
+data quality. Isso cobre uma fatia pequena dos defeitos reais. Estes passam
+batido:
+
+| Defeito | Por que a expectativa por coluna nao ve |
+|---|---|
+| Perda de 12% das linhas num join | As linhas que restaram estao todas validas |
+| Coluna removida na origem | `mergeSchema` absorve; a coluna vira NULL em silencio |
+| Centavos lidos como reais | Cada valor individual esta dentro da faixa |
+| Duplicacao de valor num `explode` | A contagem de chaves nao muda |
+| A populacao mudou | Todas as linhas continuam validas |
+| Escrita fora do pipeline | A expectativa so roda dentro do pipeline |
+
+O projeto ataca cada um com uma tecnica especifica — **114 checagens por
+execucao**, em seis camadas:
+
+```
+   escrita ──────────> 1. CHECK constraints (Delta)      o storage RECUSA o commit
+   apos escrever ────> 2. Expectativas por coluna        nulo, dominio, faixa, frescor
+                       3. Expectativas estendidas        FK, chave composta, agregados, SQL
+   entre camadas ────> 4. Conciliacao                    nada sumiu? o valor bate?
+   contra o passado ─> 5. Contratos de schema            a estrutura mudou?
+                       6. Deteccao de drift              a populacao mudou?
+                                    │
+                                    v
+                        Scorecard (0-100) + portao
+```
+
+**1. CHECK constraints** — a unica camada que *impede* o dado ruim de existir;
+as outras apenas medem. Vive no protocolo da tabela, entao vale tambem para o
+notebook do analista e o backfill manual, que nao passam pelo pipeline.
+31 constraints em 9 tabelas. A Bronze nao recebe nenhuma, de proposito.
+
+**2 e 3. Expectativas** — alem das regras por coluna, as que precisam de mais de
+uma coluna ou tabela: integridade referencial, chave composta (o *grao* da
+tabela), media dentro de faixa (pega erro de escala que nenhuma regra por linha
+detecta) e SQL arbitrario:
+
+```python
+custom_sql("sem_vazamento_temporal",
+           "feature_month < date_format(event_date, 'yyyy-MM')")
+custom_sql("resultado_fecha",
+           "abs(net_result - (revenue_total - loss_total + recovery_amount)) < 0.05")
+```
+
+A primeira aplica **em producao, a cada execucao**, o mesmo invariante de
+vazamento point-in-time que os testes cobrem em CI.
+
+**4. Conciliacao** — nove identidades que precisam fechar:
+
+```
+linhas da Bronze  ==  linhas da Silver  +  linhas em quarentena
+soma de valor na Silver  ==  soma de valor na Gold
+```
+
+A tolerancia e **calculada, nao chutada**: a Gold arredonda por grupo, entao o
+limite teorico do erro e `0,005 × 2 × n_grupos`. Uma diferenca maior nao e
+arredondamento, e defeito. *Um alarme que dispara sozinho e pior do que nenhum
+alarme — ele treina o time a ignora-lo.*
+
+**5. Contratos de schema** — o schema de cada tabela Silver/Gold e congelado em
+`contracts/*.json`, versionado no Git. Mudancas sao classificadas em **BREAKING**
+(coluna removida, tipo incompativel → falha), **ADDITIVE** (coluna nova → passa,
+registrado) e **COMPATIBLE** (`int`→`bigint` → passa). Aceitar uma mudanca exige
+`--update`, que gera **diff no Git** e passa por code review.
+
+**6. Drift** — volume contra a **mediana** historica (mediana, nao media: uma
+execucao anomala envenena a media) e **PSI** (Population Stability Index, padrao
+de risco de credito) sobre as features.
+
+> **O monitor de PSI achou um defeito real neste projeto.** A feature
+> `tf_customer_txn_seq` marcou PSI = 0,93. Diagnostico: contador monotonico — num
+> split temporal o periodo recente sempre tem valores maiores, e em producao a
+> feature assumiria valores que nunca existiram no treino. Limitar o valor nao
+> resolvia; a tendencia permanecia. Trocamos por `tf_is_first_transaction`, que
+> mantem o sinal util sem a tendencia.
+
+**7. Scorecard** — 114 checagens viram um numero e uma decisao: nota por tabela,
+camada e geral, ponderada por severidade (`error` custa 3× `warn`), com
+penalidade direta por falha de conciliacao e drift. Abaixo do minimo, o build
+falha. O relatorio e publicado no resumo do job e aparece **direto na aba do PR**.
+
+Tudo persistido em Delta (`quality.dq_results`, `reconciliation_results`,
+`drift_results`, `scorecard`) — da para consultar a evolucao da qualidade em vez
+de ler log.
+
+Detalhes em **[`docs/data_quality.md`](docs/data_quality.md)**.
+
+---
+
+## ⚙️ CI/CD
+
+**O CI executa o pipeline inteiro** — as 23 etapas, as 114 checagens — no perfil
+`ci`, que reduz apenas o **volume** dos dados (12 mil transacoes em vez de 260
+mil). Nenhuma etapa e pulada, nenhuma regra e afrouxada.
+
+> Um CI que exercita um caminho diferente do de producao nao testa producao.
+
+O perfil e um overlay mesclado sobre a configuracao base, entao nao existe uma
+segunda copia para divergir.
+
+### `ci.yml` — a cada push e Pull Request
+
+| Job | O que faz | Duracao |
+|---|---|---|
+| `lint` | `ruff check` + `ruff format --check` + `compileall` | ~20 s |
+| `testes-unitarios` | 12 testes sem subir o Spark (config, DAG, catalogo, logica de qualidade) | ~1 min |
+| `pipeline` | Pipeline completo + testes de integracao + portao de qualidade | ~4 min |
+
+Detalhes que importam:
+
+- **Cache dos JARs do Delta** (`.ivy2`) — evita rebaixar do Maven a cada push.
+- **`PIPELINE_RUN_ID=gha-${{ github.run_id }}`** — as colunas de auditoria das
+  tabelas apontam para a execucao do workflow. "Qual build gerou esta linha?"
+  vira uma query.
+- **Scorecard no resumo do job** — aparece na aba do PR, sem baixar artefato.
+- **Diagnostico automatico na falha** — quando o portao reprova, um passo publica
+  a tabela das regras que falharam.
+
+### `data-quality.yml` — todo dia
+
+Valida o **dado**, nao a mudanca de codigo. E o que da sentido ao drift:
+comparar hoje com a mediana historica exige uma serie historica, que este
+agendamento constroi. Quando reprova, **abre uma issue** (ou comenta na ja
+aberta, para nao empilhar uma por dia).
+
+### Dependabot e pre-commit
+
+O Dependabot agrupa `pyspark` + `delta-spark` (versoes acopladas). Como o CI roda
+o pipeline inteiro, cada PR dele vira um **teste de compatibilidade automatico**.
+
+O pre-commit roda o mesmo lint antes do push, mais um hook que **bloqueia commit
+de dado gerado** — o erro mais comum em repositorio de engenharia de dados.
 
 ---
 
@@ -702,7 +857,8 @@ interfaces ja isoladas no codigo.
 |---|---|
 | [`docs/architecture.md`](docs/architecture.md) | Decisoes de arquitetura, particionamento, trade-offs |
 | [`docs/data_dictionary.md`](docs/data_dictionary.md) | Dicionario de dados completo, coluna a coluna |
-| [`docs/governance.md`](docs/governance.md) | Catalogo, LGPD, qualidade, linhagem, retencao |
+| [`docs/data_quality.md`](docs/data_quality.md) | As 6 camadas de qualidade e o CI/CD, em detalhe |
+| [`docs/governance.md`](docs/governance.md) | Catalogo, LGPD, linhagem, retencao |
 | [`docs/generated/data_catalog.md`](docs/generated/) | Catalogo gerado automaticamente pelo pipeline |
 | [`docs/linkedin_post.md`](docs/linkedin_post.md) | Texto pronto para publicar |
 | [`reports/`](reports/) | Relatorio analitico gerado pela camada de IA |

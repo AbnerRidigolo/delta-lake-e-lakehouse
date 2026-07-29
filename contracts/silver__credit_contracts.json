@@ -1,0 +1,123 @@
+{
+  "table": "silver.credit_contracts",
+  "frozen_at": "2026-07-29T12:22:14+00:00",
+  "note": "contrato criado automaticamente",
+  "columns": {
+    "customer_id": {
+      "type": "string",
+      "nullable": true
+    },
+    "contract_id": {
+      "type": "string",
+      "nullable": true
+    },
+    "product": {
+      "type": "string",
+      "nullable": true
+    },
+    "principal_amount": {
+      "type": "double",
+      "nullable": true
+    },
+    "interest_rate_month": {
+      "type": "double",
+      "nullable": true
+    },
+    "term_months": {
+      "type": "int",
+      "nullable": true
+    },
+    "origination_date": {
+      "type": "date",
+      "nullable": true
+    },
+    "installments_paid": {
+      "type": "int",
+      "nullable": true
+    },
+    "outstanding_balance": {
+      "type": "double",
+      "nullable": true
+    },
+    "days_past_due": {
+      "type": "int",
+      "nullable": true
+    },
+    "status": {
+      "type": "string",
+      "nullable": true
+    },
+    "recovery_amount": {
+      "type": "double",
+      "nullable": true
+    },
+    "collateral": {
+      "type": "string",
+      "nullable": true
+    },
+    "customer_key": {
+      "type": "string",
+      "nullable": true
+    },
+    "customer_segment": {
+      "type": "string",
+      "nullable": true
+    },
+    "customer_risk_band": {
+      "type": "string",
+      "nullable": true
+    },
+    "customer_income": {
+      "type": "double",
+      "nullable": true
+    },
+    "customer_state": {
+      "type": "string",
+      "nullable": true
+    },
+    "delinquency_bucket": {
+      "type": "string",
+      "nullable": true
+    },
+    "provision_rate": {
+      "type": "double",
+      "nullable": true
+    },
+    "provision_amount": {
+      "type": "double",
+      "nullable": true
+    },
+    "is_npl": {
+      "type": "boolean",
+      "nullable": true
+    },
+    "is_written_off": {
+      "type": "boolean",
+      "nullable": true
+    },
+    "vintage": {
+      "type": "string",
+      "nullable": true
+    },
+    "months_on_book": {
+      "type": "bigint",
+      "nullable": true
+    },
+    "monthly_installment": {
+      "type": "double",
+      "nullable": true
+    },
+    "debt_to_income": {
+      "type": "double",
+      "nullable": true
+    },
+    "progress_ratio": {
+      "type": "double",
+      "nullable": true
+    },
+    "exposure_at_default": {
+      "type": "double",
+      "nullable": true
+    }
+  }
+}

@@ -50,9 +50,9 @@ import argparse
 import json
 import os
 import textwrap
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Dict, List, Optional, Sequence
 
 import numpy as np
 from pyspark.sql import SparkSession
@@ -72,6 +72,7 @@ EMBEDDING_MODEL_FILE = "rag_embedder.joblib"
 # ===========================================================================
 # 1) Construcao dos documentos a partir da camada Gold
 # ===========================================================================
+
 
 @dataclass
 class Document:
@@ -94,7 +95,7 @@ def _fmt(value, digits: int = 2) -> str:
         return str(value)
 
 
-def build_documents(spark: SparkSession) -> List[Document]:
+def build_documents(spark: SparkSession) -> list[Document]:
     """Converte as tabelas Gold em paragrafos descritivos auto-contidos.
 
     A regra de ouro do chunking: cada documento precisa fazer sentido **sozinho**,
@@ -103,223 +104,270 @@ def build_documents(spark: SparkSession) -> List[Document]:
     le tem a tabela ao lado.
     """
     cfg = get_settings()
-    documents: List[Document] = []
+    documents: list[Document] = []
 
     # ------------------------------------------------------ visao mensal ----
     kpis = spark.read.format("delta").load(cfg.table_path("gold", "financial_kpis_daily"))
-    monthly = kpis.groupBy("year_month").agg(
-        F.round(F.sum("tpv"), 2).alias("tpv"),
-        F.round(F.sum("revenue_mdr"), 2).alias("receita_mdr"),
-        F.round(F.sum("revenue_interest"), 2).alias("receita_juros"),
-        F.round(F.sum("revenue_total"), 2).alias("receita_total"),
-        F.round(F.sum("loss_total"), 2).alias("perdas"),
-        F.round(F.sum("recovery_amount"), 2).alias("recuperacao"),
-        F.round(F.sum("net_result"), 2).alias("resultado"),
-        F.sum("txn_count").alias("transacoes"),
-        F.round(F.avg("approval_rate"), 4).alias("taxa_aprovacao"),
-        F.round(F.avg("chargeback_rate"), 5).alias("taxa_chargeback"),
-        F.round(F.avg("take_rate"), 5).alias("take_rate"),
-    ).orderBy("year_month").collect()
+    monthly = (
+        kpis.groupBy("year_month")
+        .agg(
+            F.round(F.sum("tpv"), 2).alias("tpv"),
+            F.round(F.sum("revenue_mdr"), 2).alias("receita_mdr"),
+            F.round(F.sum("revenue_interest"), 2).alias("receita_juros"),
+            F.round(F.sum("revenue_total"), 2).alias("receita_total"),
+            F.round(F.sum("loss_total"), 2).alias("perdas"),
+            F.round(F.sum("recovery_amount"), 2).alias("recuperacao"),
+            F.round(F.sum("net_result"), 2).alias("resultado"),
+            F.sum("txn_count").alias("transacoes"),
+            F.round(F.avg("approval_rate"), 4).alias("taxa_aprovacao"),
+            F.round(F.avg("chargeback_rate"), 5).alias("taxa_chargeback"),
+            F.round(F.avg("take_rate"), 5).alias("take_rate"),
+        )
+        .orderBy("year_month")
+        .collect()
+    )
 
     for row in monthly:
         data = row.asDict()
-        documents.append(Document(
-            doc_id=f"kpi::{data['year_month']}",
-            source_table="gold.financial_kpis_daily",
-            grain="mes",
-            title=f"Resultado financeiro de {data['year_month']}",
-            content=(
-                f"No mes de {data['year_month']}, a fintech NeoPag processou "
-                f"{int(data['transacoes'])} transacoes com TPV (volume transacionado) de "
-                f"R$ {_fmt(data['tpv'])}. A receita total foi de R$ {_fmt(data['receita_total'])}, "
-                f"sendo R$ {_fmt(data['receita_mdr'])} de MDR (taxa de adquirencia cobrada dos "
-                f"lojistas) e R$ {_fmt(data['receita_juros'])} de juros da carteira de credito. "
-                f"As perdas totais (chargeback, fraude e write-off) somaram "
-                f"R$ {_fmt(data['perdas'])} e a recuperacao de credito trouxe de volta "
-                f"R$ {_fmt(data['recuperacao'])}. O resultado liquido do mes foi de "
-                f"R$ {_fmt(data['resultado'])}. A taxa de aprovacao media foi de "
-                f"{_fmt(data['taxa_aprovacao'] * 100)}%, a taxa de chargeback de "
-                f"{_fmt(data['taxa_chargeback'] * 100, 3)}% e o take rate de "
-                f"{_fmt(data['take_rate'] * 100, 3)}%."
-            ),
-            metadata=json.dumps(data, default=str, ensure_ascii=False),
-        ))
+        documents.append(
+            Document(
+                doc_id=f"kpi::{data['year_month']}",
+                source_table="gold.financial_kpis_daily",
+                grain="mes",
+                title=f"Resultado financeiro de {data['year_month']}",
+                content=(
+                    f"No mes de {data['year_month']}, a fintech NeoPag processou "
+                    f"{int(data['transacoes'])} transacoes com TPV (volume transacionado) de "
+                    f"R$ {_fmt(data['tpv'])}. A receita total foi de R$ {_fmt(data['receita_total'])}, "
+                    f"sendo R$ {_fmt(data['receita_mdr'])} de MDR (taxa de adquirencia cobrada dos "
+                    f"lojistas) e R$ {_fmt(data['receita_juros'])} de juros da carteira de credito. "
+                    f"As perdas totais (chargeback, fraude e write-off) somaram "
+                    f"R$ {_fmt(data['perdas'])} e a recuperacao de credito trouxe de volta "
+                    f"R$ {_fmt(data['recuperacao'])}. O resultado liquido do mes foi de "
+                    f"R$ {_fmt(data['resultado'])}. A taxa de aprovacao media foi de "
+                    f"{_fmt(data['taxa_aprovacao'] * 100)}%, a taxa de chargeback de "
+                    f"{_fmt(data['taxa_chargeback'] * 100, 3)}% e o take rate de "
+                    f"{_fmt(data['take_rate'] * 100, 3)}%."
+                ),
+                metadata=json.dumps(data, default=str, ensure_ascii=False),
+            )
+        )
 
     # ------------------------------------------------- carteira de credito ---
     portfolio = spark.read.format("delta").load(cfg.table_path("gold", "credit_risk_portfolio"))
-    by_product = portfolio.groupBy("product").agg(
-        F.sum("contracts").alias("contratos"),
-        F.round(F.sum("ead"), 2).alias("ead"),
-        F.round(F.sum("npl_balance"), 2).alias("saldo_npl"),
-        F.round(F.sum("provision_amount"), 2).alias("provisao"),
-        F.round(F.sum("expected_loss"), 2).alias("perda_esperada"),
-        F.round(F.avg("pd_observed"), 4).alias("pd_media"),
-        F.round(F.avg("lgd_assumption"), 4).alias("lgd"),
-    ).collect()
+    by_product = (
+        portfolio.groupBy("product")
+        .agg(
+            F.sum("contracts").alias("contratos"),
+            F.round(F.sum("ead"), 2).alias("ead"),
+            F.round(F.sum("npl_balance"), 2).alias("saldo_npl"),
+            F.round(F.sum("provision_amount"), 2).alias("provisao"),
+            F.round(F.sum("expected_loss"), 2).alias("perda_esperada"),
+            F.round(F.avg("pd_observed"), 4).alias("pd_media"),
+            F.round(F.avg("lgd_assumption"), 4).alias("lgd"),
+        )
+        .collect()
+    )
 
     for row in by_product:
         data = row.asDict()
         npl_ratio = (data["saldo_npl"] or 0) / max(data["ead"] or 1, 1)
-        documents.append(Document(
-            doc_id=f"credito::{data['product']}",
-            source_table="gold.credit_risk_portfolio",
-            grain="produto de credito",
-            title=f"Carteira de credito - produto {data['product']}",
-            content=(
-                f"O produto de credito '{data['product']}' tem {int(data['contratos'])} contratos "
-                f"e exposicao (EAD) de R$ {_fmt(data['ead'])}. O saldo inadimplente acima de 90 "
-                f"dias (NPL) e de R$ {_fmt(data['saldo_npl'])}, o que representa "
-                f"{_fmt(npl_ratio * 100)}% da carteira do produto. A provisao constituida e de "
-                f"R$ {_fmt(data['provisao'])} e a perda esperada calculada por EAD x PD x LGD e "
-                f"de R$ {_fmt(data['perda_esperada'])}. A probabilidade de default observada "
-                f"(PD) media e de {_fmt(data['pd_media'] * 100)}% e a perda dado o default (LGD) "
-                f"assumida e de {_fmt(data['lgd'] * 100)}%."
-            ),
-            metadata=json.dumps(data, default=str, ensure_ascii=False),
-        ))
+        documents.append(
+            Document(
+                doc_id=f"credito::{data['product']}",
+                source_table="gold.credit_risk_portfolio",
+                grain="produto de credito",
+                title=f"Carteira de credito - produto {data['product']}",
+                content=(
+                    f"O produto de credito '{data['product']}' tem {int(data['contratos'])} contratos "
+                    f"e exposicao (EAD) de R$ {_fmt(data['ead'])}. O saldo inadimplente acima de 90 "
+                    f"dias (NPL) e de R$ {_fmt(data['saldo_npl'])}, o que representa "
+                    f"{_fmt(npl_ratio * 100)}% da carteira do produto. A provisao constituida e de "
+                    f"R$ {_fmt(data['provisao'])} e a perda esperada calculada por EAD x PD x LGD e "
+                    f"de R$ {_fmt(data['perda_esperada'])}. A probabilidade de default observada "
+                    f"(PD) media e de {_fmt(data['pd_media'] * 100)}% e a perda dado o default (LGD) "
+                    f"assumida e de {_fmt(data['lgd'] * 100)}%."
+                ),
+                metadata=json.dumps(data, default=str, ensure_ascii=False),
+            )
+        )
 
     # Safras com alerta: o que a area de risco realmente procura.
-    alerts = portfolio.where(F.col("portfolio_alert") != "dentro_do_esperado") \
-        .orderBy(F.desc("expected_loss")).limit(15).collect()
+    alerts = (
+        portfolio.where(F.col("portfolio_alert") != "dentro_do_esperado")
+        .orderBy(F.desc("expected_loss"))
+        .limit(15)
+        .collect()
+    )
     for row in alerts:
         data = row.asDict()
-        documents.append(Document(
-            doc_id=f"safra::{data['vintage']}::{data['product']}::{data['customer_risk_band']}",
-            source_table="gold.credit_risk_portfolio",
-            grain="safra x produto x faixa de risco",
-            title=f"Alerta na safra {data['vintage']} - {data['product']}",
-            content=(
-                f"A safra de {data['vintage']} do produto '{data['product']}' na faixa de risco "
-                f"{data['customer_risk_band']} esta classificada como '{data['portfolio_alert']}'. "
-                f"Sao {int(data['contracts'])} contratos com EAD de R$ {_fmt(data['ead'])}, "
-                f"PD observada de {_fmt(data['pd_observed'] * 100)}%, perda esperada de "
-                f"R$ {_fmt(data['expected_loss'])} e indice de cobertura de "
-                f"{_fmt(data['coverage_ratio'])}x. O atraso medio e de "
-                f"{_fmt(data['avg_days_past_due'], 0)} dias."
-            ),
-            metadata=json.dumps(data, default=str, ensure_ascii=False),
-        ))
+        documents.append(
+            Document(
+                doc_id=f"safra::{data['vintage']}::{data['product']}::{data['customer_risk_band']}",
+                source_table="gold.credit_risk_portfolio",
+                grain="safra x produto x faixa de risco",
+                title=f"Alerta na safra {data['vintage']} - {data['product']}",
+                content=(
+                    f"A safra de {data['vintage']} do produto '{data['product']}' na faixa de risco "
+                    f"{data['customer_risk_band']} esta classificada como '{data['portfolio_alert']}'. "
+                    f"Sao {int(data['contracts'])} contratos com EAD de R$ {_fmt(data['ead'])}, "
+                    f"PD observada de {_fmt(data['pd_observed'] * 100)}%, perda esperada de "
+                    f"R$ {_fmt(data['expected_loss'])} e indice de cobertura de "
+                    f"{_fmt(data['coverage_ratio'])}x. O atraso medio e de "
+                    f"{_fmt(data['avg_days_past_due'], 0)} dias."
+                ),
+                metadata=json.dumps(data, default=str, ensure_ascii=False),
+            )
+        )
 
     # ------------------------------------------------------------ clientes ---
     customers = spark.read.format("delta").load(cfg.table_path("gold", "customer_360"))
-    by_segment = customers.groupBy("segment", "value_risk_segment").agg(
-        F.count("*").alias("clientes"),
-        F.round(F.avg("customer_score"), 0).alias("score_medio"),
-        F.round(F.sum("tpv_90d"), 2).alias("tpv_90d"),
-        F.round(F.avg("limit_utilization"), 4).alias("utilizacao_limite"),
-        F.sum(F.col("is_churn_risk").cast("int")).alias("em_churn"),
-    ).collect()
+    by_segment = (
+        customers.groupBy("segment", "value_risk_segment")
+        .agg(
+            F.count("*").alias("clientes"),
+            F.round(F.avg("customer_score"), 0).alias("score_medio"),
+            F.round(F.sum("tpv_90d"), 2).alias("tpv_90d"),
+            F.round(F.avg("limit_utilization"), 4).alias("utilizacao_limite"),
+            F.sum(F.col("is_churn_risk").cast("int")).alias("em_churn"),
+        )
+        .collect()
+    )
 
     for row in by_segment:
         data = row.asDict()
-        documents.append(Document(
-            doc_id=f"cliente::{data['segment']}::{data['value_risk_segment']}",
-            source_table="gold.customer_360",
-            grain="segmento x perfil de valor/risco",
-            title=f"Clientes {data['segment']} no perfil {data['value_risk_segment']}",
-            content=(
-                f"O segmento '{data['segment']}' no perfil de valor e risco "
-                f"'{data['value_risk_segment']}' reune {int(data['clientes'])} clientes, com "
-                f"score medio de {_fmt(data['score_medio'], 0)} pontos (escala 0 a 1000) e TPV "
-                f"nos ultimos 90 dias de R$ {_fmt(data['tpv_90d'])}. A utilizacao media de limite "
-                f"e de {_fmt(data['utilizacao_limite'] * 100)}% e "
-                f"{int(data['em_churn'])} clientes estao em risco de churn (inatividade)."
-            ),
-            metadata=json.dumps(data, default=str, ensure_ascii=False),
-        ))
+        documents.append(
+            Document(
+                doc_id=f"cliente::{data['segment']}::{data['value_risk_segment']}",
+                source_table="gold.customer_360",
+                grain="segmento x perfil de valor/risco",
+                title=f"Clientes {data['segment']} no perfil {data['value_risk_segment']}",
+                content=(
+                    f"O segmento '{data['segment']}' no perfil de valor e risco "
+                    f"'{data['value_risk_segment']}' reune {int(data['clientes'])} clientes, com "
+                    f"score medio de {_fmt(data['score_medio'], 0)} pontos (escala 0 a 1000) e TPV "
+                    f"nos ultimos 90 dias de R$ {_fmt(data['tpv_90d'])}. A utilizacao media de limite "
+                    f"e de {_fmt(data['utilizacao_limite'] * 100)}% e "
+                    f"{int(data['em_churn'])} clientes estao em risco de churn (inatividade)."
+                ),
+                metadata=json.dumps(data, default=str, ensure_ascii=False),
+            )
+        )
 
     # -------------------------------------------------------------- fraude ---
     signals = spark.read.format("delta").load(cfg.table_path("gold", "transaction_fraud_signals"))
-    by_channel = signals.groupBy("channel").agg(
-        F.count("*").alias("transacoes"),
-        F.sum("is_fraud").alias("fraudes"),
-        F.round(F.avg("is_fraud"), 5).alias("taxa_fraude"),
-        F.round(F.sum(F.when(F.col("is_fraud") == 1, F.col("amount")).otherwise(0.0)), 2)
-         .alias("valor_fraude"),
-        F.round(F.avg("fraud_score_rule"), 1).alias("score_medio"),
-    ).collect()
+    by_channel = (
+        signals.groupBy("channel")
+        .agg(
+            F.count("*").alias("transacoes"),
+            F.sum("is_fraud").alias("fraudes"),
+            F.round(F.avg("is_fraud"), 5).alias("taxa_fraude"),
+            F.round(F.sum(F.when(F.col("is_fraud") == 1, F.col("amount")).otherwise(0.0)), 2).alias(
+                "valor_fraude"
+            ),
+            F.round(F.avg("fraud_score_rule"), 1).alias("score_medio"),
+        )
+        .collect()
+    )
 
     for row in by_channel:
         data = row.asDict()
-        documents.append(Document(
-            doc_id=f"fraude::canal::{data['channel']}",
-            source_table="gold.transaction_fraud_signals",
-            grain="canal de pagamento",
-            title=f"Fraude no canal {data['channel']}",
-            content=(
-                f"O canal de pagamento '{data['channel']}' registrou "
-                f"{int(data['transacoes'])} transacoes, das quais {int(data['fraudes'])} foram "
-                f"fraudulentas - uma taxa de fraude de {_fmt(data['taxa_fraude'] * 100, 3)}%, "
-                f"totalizando R$ {_fmt(data['valor_fraude'])} em valor fraudado. O score medio "
-                f"atribuido pelo motor de regras neste canal e de {_fmt(data['score_medio'], 1)} "
-                f"pontos (escala 0 a 100)."
-            ),
-            metadata=json.dumps(data, default=str, ensure_ascii=False),
-        ))
+        documents.append(
+            Document(
+                doc_id=f"fraude::canal::{data['channel']}",
+                source_table="gold.transaction_fraud_signals",
+                grain="canal de pagamento",
+                title=f"Fraude no canal {data['channel']}",
+                content=(
+                    f"O canal de pagamento '{data['channel']}' registrou "
+                    f"{int(data['transacoes'])} transacoes, das quais {int(data['fraudes'])} foram "
+                    f"fraudulentas - uma taxa de fraude de {_fmt(data['taxa_fraude'] * 100, 3)}%, "
+                    f"totalizando R$ {_fmt(data['valor_fraude'])} em valor fraudado. O score medio "
+                    f"atribuido pelo motor de regras neste canal e de {_fmt(data['score_medio'], 1)} "
+                    f"pontos (escala 0 a 100)."
+                ),
+                metadata=json.dumps(data, default=str, ensure_ascii=False),
+            )
+        )
 
-    by_pattern = signals.where(F.col("is_fraud") == 1).groupBy("fraud_type").agg(
-        F.count("*").alias("ocorrencias"),
-        F.round(F.sum("amount"), 2).alias("valor"),
-        F.round(F.avg("amount"), 2).alias("ticket_medio"),
-        F.round(F.avg("fraud_score_rule"), 1).alias("score_medio"),
-        F.round(F.avg(F.col("is_new_device").cast("int")), 3).alias("share_device_novo"),
-    ).collect()
+    by_pattern = (
+        signals.where(F.col("is_fraud") == 1)
+        .groupBy("fraud_type")
+        .agg(
+            F.count("*").alias("ocorrencias"),
+            F.round(F.sum("amount"), 2).alias("valor"),
+            F.round(F.avg("amount"), 2).alias("ticket_medio"),
+            F.round(F.avg("fraud_score_rule"), 1).alias("score_medio"),
+            F.round(F.avg(F.col("is_new_device").cast("int")), 3).alias("share_device_novo"),
+        )
+        .collect()
+    )
 
     for row in by_pattern:
         data = row.asDict()
-        documents.append(Document(
-            doc_id=f"fraude::padrao::{data['fraud_type']}",
-            source_table="gold.transaction_fraud_signals",
-            grain="padrao de fraude",
-            title=f"Padrao de fraude: {data['fraud_type']}",
-            content=(
-                f"O padrao de fraude '{data['fraud_type']}' teve {int(data['ocorrencias'])} "
-                f"ocorrencias no periodo, somando R$ {_fmt(data['valor'])} com ticket medio de "
-                f"R$ {_fmt(data['ticket_medio'])}. O motor de regras atribuiu score medio de "
-                f"{_fmt(data['score_medio'], 1)} pontos a essas transacoes e "
-                f"{_fmt(data['share_device_novo'] * 100, 1)}% delas partiram de um dispositivo "
-                f"nunca usado antes pelo cliente."
-            ),
-            metadata=json.dumps(data, default=str, ensure_ascii=False),
-        ))
+        documents.append(
+            Document(
+                doc_id=f"fraude::padrao::{data['fraud_type']}",
+                source_table="gold.transaction_fraud_signals",
+                grain="padrao de fraude",
+                title=f"Padrao de fraude: {data['fraud_type']}",
+                content=(
+                    f"O padrao de fraude '{data['fraud_type']}' teve {int(data['ocorrencias'])} "
+                    f"ocorrencias no periodo, somando R$ {_fmt(data['valor'])} com ticket medio de "
+                    f"R$ {_fmt(data['ticket_medio'])}. O motor de regras atribuiu score medio de "
+                    f"{_fmt(data['score_medio'], 1)} pontos a essas transacoes e "
+                    f"{_fmt(data['share_device_novo'] * 100, 1)}% delas partiram de um dispositivo "
+                    f"nunca usado antes pelo cliente."
+                ),
+                metadata=json.dumps(data, default=str, ensure_ascii=False),
+            )
+        )
 
     # ------------------------------------------------------------ lojistas ---
     merchants = spark.read.format("delta").load(cfg.table_path("gold", "merchant_performance"))
-    by_category = merchants.groupBy("category").agg(
-        F.countDistinct("merchant_id").alias("lojistas"),
-        F.round(F.sum("tpv"), 2).alias("tpv"),
-        F.round(F.sum("mdr_revenue"), 2).alias("receita"),
-        F.round(F.avg("chargeback_rate"), 5).alias("taxa_chargeback"),
-        F.round(F.avg("fraud_rate"), 5).alias("taxa_fraude"),
-    ).collect()
+    by_category = (
+        merchants.groupBy("category")
+        .agg(
+            F.countDistinct("merchant_id").alias("lojistas"),
+            F.round(F.sum("tpv"), 2).alias("tpv"),
+            F.round(F.sum("mdr_revenue"), 2).alias("receita"),
+            F.round(F.avg("chargeback_rate"), 5).alias("taxa_chargeback"),
+            F.round(F.avg("fraud_rate"), 5).alias("taxa_fraude"),
+        )
+        .collect()
+    )
 
     for row in by_category:
         data = row.asDict()
-        documents.append(Document(
-            doc_id=f"lojista::categoria::{data['category']}",
-            source_table="gold.merchant_performance",
-            grain="categoria de estabelecimento",
-            title=f"Estabelecimentos da categoria {data['category']}",
-            content=(
-                f"A categoria de estabelecimentos '{data['category']}' reune "
-                f"{int(data['lojistas'])} lojistas, com TPV de R$ {_fmt(data['tpv'])} e receita "
-                f"de MDR de R$ {_fmt(data['receita'])}. A taxa media de chargeback da categoria "
-                f"e de {_fmt(data['taxa_chargeback'] * 100, 3)}% e a taxa de fraude e de "
-                f"{_fmt(data['taxa_fraude'] * 100, 3)}%."
-            ),
-            metadata=json.dumps(data, default=str, ensure_ascii=False),
-        ))
+        documents.append(
+            Document(
+                doc_id=f"lojista::categoria::{data['category']}",
+                source_table="gold.merchant_performance",
+                grain="categoria de estabelecimento",
+                title=f"Estabelecimentos da categoria {data['category']}",
+                content=(
+                    f"A categoria de estabelecimentos '{data['category']}' reune "
+                    f"{int(data['lojistas'])} lojistas, com TPV de R$ {_fmt(data['tpv'])} e receita "
+                    f"de MDR de R$ {_fmt(data['receita'])}. A taxa media de chargeback da categoria "
+                    f"e de {_fmt(data['taxa_chargeback'] * 100, 3)}% e a taxa de fraude e de "
+                    f"{_fmt(data['taxa_fraude'] * 100, 3)}%."
+                ),
+                metadata=json.dumps(data, default=str, ensure_ascii=False),
+            )
+        )
 
     # ---------------------------------------------- documentos de RANKING ----
-    documents.extend(build_ranking_documents(by_channel, by_category, by_product,
-                                             portfolio, monthly))
+    documents.extend(
+        build_ranking_documents(by_channel, by_category, by_product, portfolio, monthly)
+    )
 
     log.info("Documentos construidos: %s", len(documents))
     return documents
 
 
-def build_ranking_documents(by_channel, by_category, by_product, portfolio, monthly
-                            ) -> List[Document]:
+def build_ranking_documents(
+    by_channel, by_category, by_product, portfolio, monthly
+) -> list[Document]:
     """Cria documentos de **ranking** e de **panorama consolidado**.
 
     Por que isso e necessario
@@ -335,62 +383,70 @@ def build_ranking_documents(by_channel, by_category, by_product, portfolio, mont
     consolidadas na indexacao e uma das tecnicas mais efetivas de RAG sobre
     dados estruturados - e custa uma agregacao a mais, nao um modelo maior.
     """
-    documents: List[Document] = []
+    documents: list[Document] = []
 
     # --- ranking de canais por taxa de fraude --------------------------------
-    canais = sorted([r.asDict() for r in by_channel],
-                    key=lambda r: r["taxa_fraude"] or 0, reverse=True)
+    canais = sorted(
+        [r.asDict() for r in by_channel], key=lambda r: r["taxa_fraude"] or 0, reverse=True
+    )
     if canais:
         linhas = "; ".join(
             f"{i}o lugar: {c['channel']} com {_fmt((c['taxa_fraude'] or 0) * 100, 3)}% "
             f"de fraude ({int(c['fraudes'])} casos, R$ {_fmt(c['valor_fraude'])})"
             for i, c in enumerate(canais, start=1)
         )
-        documents.append(Document(
-            doc_id="ranking::canais_fraude",
-            source_table="gold.transaction_fraud_signals",
-            grain="ranking",
-            title="Ranking dos canais de pagamento por taxa de fraude",
-            content=(
-                f"Ranking dos canais de pagamento com MAIS fraude, do maior para o menor. "
-                f"O canal com a maior taxa de fraude, o mais arriscado e o que concentra o "
-                f"maior numero de fraudes e o '{canais[0]['channel']}', com "
-                f"{_fmt((canais[0]['taxa_fraude'] or 0) * 100, 3)}% das transacoes fraudulentas. "
-                f"O canal mais seguro, com a menor taxa de fraude, e o "
-                f"'{canais[-1]['channel']}'. Ranking completo: {linhas}."
-            ),
-            metadata=json.dumps(canais, default=str, ensure_ascii=False),
-        ))
+        documents.append(
+            Document(
+                doc_id="ranking::canais_fraude",
+                source_table="gold.transaction_fraud_signals",
+                grain="ranking",
+                title="Ranking dos canais de pagamento por taxa de fraude",
+                content=(
+                    f"Ranking dos canais de pagamento com MAIS fraude, do maior para o menor. "
+                    f"O canal com a maior taxa de fraude, o mais arriscado e o que concentra o "
+                    f"maior numero de fraudes e o '{canais[0]['channel']}', com "
+                    f"{_fmt((canais[0]['taxa_fraude'] or 0) * 100, 3)}% das transacoes fraudulentas. "
+                    f"O canal mais seguro, com a menor taxa de fraude, e o "
+                    f"'{canais[-1]['channel']}'. Ranking completo: {linhas}."
+                ),
+                metadata=json.dumps(canais, default=str, ensure_ascii=False),
+            )
+        )
 
     # --- ranking de categorias de lojista por chargeback ---------------------
-    categorias = sorted([r.asDict() for r in by_category],
-                        key=lambda r: r["taxa_chargeback"] or 0, reverse=True)
+    categorias = sorted(
+        [r.asDict() for r in by_category], key=lambda r: r["taxa_chargeback"] or 0, reverse=True
+    )
     if categorias:
         linhas = "; ".join(
             f"{c['category']}: {_fmt((c['taxa_chargeback'] or 0) * 100, 3)}% de chargeback e "
             f"{_fmt((c['taxa_fraude'] or 0) * 100, 3)}% de fraude"
             for c in categorias[:8]
         )
-        documents.append(Document(
-            doc_id="ranking::categorias_chargeback",
-            source_table="gold.merchant_performance",
-            grain="ranking",
-            title="Ranking das categorias de estabelecimento por taxa de chargeback",
-            content=(
-                f"Ranking das categorias de estabelecimento com MAIOR taxa de chargeback e "
-                f"maior risco. A categoria com a pior taxa de chargeback e "
-                f"'{categorias[0]['category']}', com "
-                f"{_fmt((categorias[0]['taxa_chargeback'] or 0) * 100, 3)}%. A categoria com o "
-                f"menor risco de chargeback e '{categorias[-1]['category']}'. "
-                f"Ranking: {linhas}."
-            ),
-            metadata=json.dumps(categorias, default=str, ensure_ascii=False),
-        ))
+        documents.append(
+            Document(
+                doc_id="ranking::categorias_chargeback",
+                source_table="gold.merchant_performance",
+                grain="ranking",
+                title="Ranking das categorias de estabelecimento por taxa de chargeback",
+                content=(
+                    f"Ranking das categorias de estabelecimento com MAIOR taxa de chargeback e "
+                    f"maior risco. A categoria com a pior taxa de chargeback e "
+                    f"'{categorias[0]['category']}', com "
+                    f"{_fmt((categorias[0]['taxa_chargeback'] or 0) * 100, 3)}%. A categoria com o "
+                    f"menor risco de chargeback e '{categorias[-1]['category']}'. "
+                    f"Ranking: {linhas}."
+                ),
+                metadata=json.dumps(categorias, default=str, ensure_ascii=False),
+            )
+        )
 
     # --- ranking de produtos de credito por inadimplencia --------------------
     produtos = sorted(
         [r.asDict() for r in by_product],
-        key=lambda r: (r["saldo_npl"] or 0) / max(r["ead"] or 1, 1), reverse=True)
+        key=lambda r: (r["saldo_npl"] or 0) / max(r["ead"] or 1, 1),
+        reverse=True,
+    )
     if produtos:
         linhas = "; ".join(
             f"{p['product']}: NPL de "
@@ -398,43 +454,51 @@ def build_ranking_documents(by_channel, by_category, by_product, portfolio, mont
             f"R$ {_fmt(p['ead'])}"
             for p in produtos
         )
-        documents.append(Document(
-            doc_id="ranking::produtos_inadimplencia",
-            source_table="gold.credit_risk_portfolio",
-            grain="ranking",
-            title="Ranking dos produtos de credito por inadimplencia",
-            content=(
-                f"Ranking dos produtos de credito com MAIOR inadimplencia (NPL 90+). O produto "
-                f"mais inadimplente, com a pior carteira e o maior risco de credito, e "
-                f"'{produtos[0]['product']}'. O produto com melhor comportamento de pagamento e "
-                f"'{produtos[-1]['product']}'. Ranking: {linhas}."
-            ),
-            metadata=json.dumps(produtos, default=str, ensure_ascii=False),
-        ))
+        documents.append(
+            Document(
+                doc_id="ranking::produtos_inadimplencia",
+                source_table="gold.credit_risk_portfolio",
+                grain="ranking",
+                title="Ranking dos produtos de credito por inadimplencia",
+                content=(
+                    f"Ranking dos produtos de credito com MAIOR inadimplencia (NPL 90+). O produto "
+                    f"mais inadimplente, com a pior carteira e o maior risco de credito, e "
+                    f"'{produtos[0]['product']}'. O produto com melhor comportamento de pagamento e "
+                    f"'{produtos[-1]['product']}'. Ranking: {linhas}."
+                ),
+                metadata=json.dumps(produtos, default=str, ensure_ascii=False),
+            )
+        )
 
     # --- piores safras -------------------------------------------------------
-    piores = [r.asDict() for r in
-              portfolio.where(F.col("contracts") >= 5).orderBy(F.desc("pd_observed")).limit(8)
-              .collect()]
+    piores = [
+        r.asDict()
+        for r in portfolio.where(F.col("contracts") >= 5)
+        .orderBy(F.desc("pd_observed"))
+        .limit(8)
+        .collect()
+    ]
     if piores:
         linhas = "; ".join(
             f"safra {p['vintage']} do produto {p['product']} na faixa {p['customer_risk_band']} "
             f"com PD de {_fmt((p['pd_observed'] or 0) * 100)}%"
             for p in piores
         )
-        documents.append(Document(
-            doc_id="ranking::piores_safras",
-            source_table="gold.credit_risk_portfolio",
-            grain="ranking",
-            title="Piores safras de originacao de credito",
-            content=(
-                f"Ranking das PIORES safras de originacao de credito, com a maior probabilidade "
-                f"de default (PD) observada. A safra mais problematica e critica e a de "
-                f"{piores[0]['vintage']} do produto '{piores[0]['product']}', com PD de "
-                f"{_fmt((piores[0]['pd_observed'] or 0) * 100)}%. Ranking completo: {linhas}."
-            ),
-            metadata=json.dumps(piores, default=str, ensure_ascii=False),
-        ))
+        documents.append(
+            Document(
+                doc_id="ranking::piores_safras",
+                source_table="gold.credit_risk_portfolio",
+                grain="ranking",
+                title="Piores safras de originacao de credito",
+                content=(
+                    f"Ranking das PIORES safras de originacao de credito, com a maior probabilidade "
+                    f"de default (PD) observada. A safra mais problematica e critica e a de "
+                    f"{piores[0]['vintage']} do produto '{piores[0]['product']}', com PD de "
+                    f"{_fmt((piores[0]['pd_observed'] or 0) * 100)}%. Ranking completo: {linhas}."
+                ),
+                metadata=json.dumps(piores, default=str, ensure_ascii=False),
+            )
+        )
 
     # --- panorama consolidado do periodo -------------------------------------
     if monthly:
@@ -447,23 +511,25 @@ def build_ranking_documents(by_channel, by_category, by_product, portfolio, mont
         }
         melhor = max(monthly, key=lambda r: r["resultado"] or 0)
         pior = min(monthly, key=lambda r: r["resultado"] or 0)
-        documents.append(Document(
-            doc_id="panorama::consolidado",
-            source_table="gold.financial_kpis_daily",
-            grain="periodo completo",
-            title="Panorama financeiro consolidado do periodo",
-            content=(
-                f"Panorama consolidado de todo o periodo analisado ({monthly[0]['year_month']} a "
-                f"{monthly[-1]['year_month']}): a fintech NeoPag processou no total "
-                f"{totais['transacoes']} transacoes, com TPV acumulado de R$ {_fmt(totais['tpv'])}, "
-                f"receita total de R$ {_fmt(totais['receita'])}, perdas totais de "
-                f"R$ {_fmt(totais['perdas'])} e resultado liquido acumulado de "
-                f"R$ {_fmt(totais['resultado'])}. O melhor mes foi {melhor['year_month']} "
-                f"(resultado de R$ {_fmt(melhor['resultado'])}) e o pior foi {pior['year_month']} "
-                f"(resultado de R$ {_fmt(pior['resultado'])})."
-            ),
-            metadata=json.dumps(totais, default=str, ensure_ascii=False),
-        ))
+        documents.append(
+            Document(
+                doc_id="panorama::consolidado",
+                source_table="gold.financial_kpis_daily",
+                grain="periodo completo",
+                title="Panorama financeiro consolidado do periodo",
+                content=(
+                    f"Panorama consolidado de todo o periodo analisado ({monthly[0]['year_month']} a "
+                    f"{monthly[-1]['year_month']}): a fintech NeoPag processou no total "
+                    f"{totais['transacoes']} transacoes, com TPV acumulado de R$ {_fmt(totais['tpv'])}, "
+                    f"receita total de R$ {_fmt(totais['receita'])}, perdas totais de "
+                    f"R$ {_fmt(totais['perdas'])} e resultado liquido acumulado de "
+                    f"R$ {_fmt(totais['resultado'])}. O melhor mes foi {melhor['year_month']} "
+                    f"(resultado de R$ {_fmt(melhor['resultado'])}) e o pior foi {pior['year_month']} "
+                    f"(resultado de R$ {_fmt(pior['resultado'])})."
+                ),
+                metadata=json.dumps(totais, default=str, ensure_ascii=False),
+            )
+        )
 
     return documents
 
@@ -471,6 +537,7 @@ def build_ranking_documents(by_channel, by_category, by_product, portfolio, mont
 # ===========================================================================
 # 2) Embeddings locais
 # ===========================================================================
+
 
 class LocalEmbedder:
     """Embeddings sem dependencia externa: TF-IDF seguido de SVD (LSA).
@@ -526,7 +593,8 @@ def _l2_normalize(matrix: np.ndarray) -> np.ndarray:
 # 3) Vector store em Delta
 # ===========================================================================
 
-def build_index() -> Dict[str, int]:
+
+def build_index() -> dict[str, int]:
     """Indexa a camada Gold: documentos + embeddings -> tabela Delta."""
     cfg = get_settings()
     spark = get_spark("rag_build_index")
@@ -554,8 +622,13 @@ def build_index() -> Dict[str, int]:
         ]
 
         path = cfg.table_path("vector_store", KNOWLEDGE_TABLE)
-        write_delta(spark.createDataFrame(rows), path, mode="overwrite", overwrite_schema=True,
-                    comment=f"indice RAG da camada Gold ({len(rows)} chunks)")
+        write_delta(
+            spark.createDataFrame(rows),
+            path,
+            mode="overwrite",
+            overwrite_schema=True,
+            comment=f"indice RAG da camada Gold ({len(rows)} chunks)",
+        )
 
         # O modelo de embedding precisa ser persistido: a consulta tem que usar
         # exatamente o mesmo espaco vetorial da indexacao.
@@ -565,14 +638,16 @@ def build_index() -> Dict[str, int]:
         artifacts.mkdir(parents=True, exist_ok=True)
         joblib.dump(embedder, artifacts / EMBEDDING_MODEL_FILE)
 
-        log.info("Indice RAG criado: %s chunks, dimensao %s -> %s",
-                 len(rows), vectors.shape[1], path)
+        log.info(
+            "Indice RAG criado: %s chunks, dimensao %s -> %s", len(rows), vectors.shape[1], path
+        )
         return {"chunks": len(rows), "dimensao": int(vectors.shape[1])}
 
 
 # ===========================================================================
 # 4) Recuperacao
 # ===========================================================================
+
 
 @dataclass
 class RetrievedChunk:
@@ -587,12 +662,33 @@ class RetrievedChunk:
 # Uma pergunta como "qual canal tem MAIS fraude?" nao e respondida pelo chunk de
 # um canal qualquer - e respondida pelo documento de ranking.
 SUPERLATIVE_TERMS = {
-    "mais", "maior", "maiores", "pior", "piores", "melhor", "melhores", "top",
-    "ranking", "principal", "principais", "concentra", "lidera", "menor", "menores",
+    "mais",
+    "maior",
+    "maiores",
+    "pior",
+    "piores",
+    "melhor",
+    "melhores",
+    "top",
+    "ranking",
+    "principal",
+    "principais",
+    "concentra",
+    "lidera",
+    "menor",
+    "menores",
 }
 AGGREGATE_TERMS = {
-    "total", "totais", "consolidado", "geral", "acumulado", "periodo", "resumo",
-    "panorama", "faturou", "faturamento",
+    "total",
+    "totais",
+    "consolidado",
+    "geral",
+    "acumulado",
+    "periodo",
+    "resumo",
+    "panorama",
+    "faturou",
+    "faturamento",
 }
 # Peso do boost aplicado aos documentos de ranking/panorama quando a intencao
 # da pergunta e superlativa. Calibrado para reordenar sem anular o sinal vetorial.
@@ -609,7 +705,7 @@ def detect_intent(question: str) -> str:
     return "especifica"
 
 
-def retrieve(question: str, top_k: Optional[int] = None) -> List[RetrievedChunk]:
+def retrieve(question: str, top_k: int | None = None) -> list[RetrievedChunk]:
     """Busca os chunks mais relevantes com **recuperacao hibrida**.
 
     Score final = similaridade do cosseno + boost por intencao.
@@ -640,8 +736,9 @@ def retrieve(question: str, top_k: Optional[int] = None) -> List[RetrievedChunk]
         raise RuntimeError("Indice nao encontrado. Rode `python -m src.ai.rag_pipeline --build`.")
     embedder: LocalEmbedder = joblib.load(embedder_path)
 
-    index = spark.read.format("delta").load(
-        cfg.table_path("vector_store", KNOWLEDGE_TABLE)).toPandas()
+    index = (
+        spark.read.format("delta").load(cfg.table_path("vector_store", KNOWLEDGE_TABLE)).toPandas()
+    )
 
     matrix = np.vstack(index["embedding"].apply(np.array).to_numpy())
     query_vector = embedder.transform([question])[0]
@@ -654,11 +751,15 @@ def retrieve(question: str, top_k: Optional[int] = None) -> List[RetrievedChunk]
         alvo = "ranking" if intent == "ranking" else "periodo completo"
         boost = (index["grain"] == alvo).to_numpy().astype(float) * INTENT_BOOST
         # O panorama tambem ajuda em perguntas de ranking, e vice-versa.
-        boost += (index["grain"].isin(["ranking", "periodo completo"])).to_numpy().astype(float) \
-            * (INTENT_BOOST / 3)
+        boost += (index["grain"].isin(["ranking", "periodo completo"])).to_numpy().astype(float) * (
+            INTENT_BOOST / 3
+        )
         scores = scores + boost
-        log.info("Intencao detectada: %s (boost aplicado a %s documentos)",
-                 intent, int((boost > 0).sum()))
+        log.info(
+            "Intencao detectada: %s (boost aplicado a %s documentos)",
+            intent,
+            int((boost > 0).sum()),
+        )
 
     best = np.argsort(-scores)[:top_k]
 
@@ -678,10 +779,11 @@ def retrieve(question: str, top_k: Optional[int] = None) -> List[RetrievedChunk]
 # 5) Camada de geracao (adaptadores de LLM)
 # ===========================================================================
 
+
 class BaseLLM:
     """Interface comum dos geradores de resposta."""
 
-    def generate(self, question: str, context: List[RetrievedChunk]) -> str:
+    def generate(self, question: str, context: list[RetrievedChunk]) -> str:
         raise NotImplementedError
 
 
@@ -694,18 +796,25 @@ class MockLLM(BaseLLM):
     sem o ruido de um modelo probabilistico no meio.
     """
 
-    def generate(self, question: str, context: List[RetrievedChunk]) -> str:
+    def generate(self, question: str, context: list[RetrievedChunk]) -> str:
         if not context:
             return "Nao encontrei informacao suficiente na camada Gold para responder."
 
-        parts = [f"**Pergunta:** {question}", "", "**Resposta baseada nos dados da camada Gold:**", ""]
+        parts = [
+            f"**Pergunta:** {question}",
+            "",
+            "**Resposta baseada nos dados da camada Gold:**",
+            "",
+        ]
         for i, chunk in enumerate(context, start=1):
             parts.append(f"{i}. {chunk.content}")
             parts.append(f"   _(fonte: `{chunk.source_table}` - relevancia {chunk.score})_")
             parts.append("")
         parts.append("---")
-        parts.append(f"_Resposta gerada por recuperacao sobre {len(context)} trechos indexados. "
-                     "Nenhum numero foi gerado pelo modelo: todos vem das tabelas Delta._")
+        parts.append(
+            f"_Resposta gerada por recuperacao sobre {len(context)} trechos indexados. "
+            "Nenhum numero foi gerado pelo modelo: todos vem das tabelas Delta._"
+        )
         return "\n".join(parts)
 
 
@@ -736,7 +845,7 @@ class AnthropicLLM(BaseLLM):
         self.model = model
         self.api_key = api_key
 
-    def generate(self, question: str, context: List[RetrievedChunk]) -> str:
+    def generate(self, question: str, context: list[RetrievedChunk]) -> str:
         from anthropic import Anthropic
 
         client = Anthropic(api_key=self.api_key)
@@ -747,11 +856,13 @@ class AnthropicLLM(BaseLLM):
             model=self.model,
             max_tokens=1200,
             system=self.SYSTEM_PROMPT,
-            messages=[{
-                "role": "user",
-                "content": f"Contexto recuperado do lakehouse:\n\n{context_block}\n\n"
-                           f"Pergunta: {question}",
-            }],
+            messages=[
+                {
+                    "role": "user",
+                    "content": f"Contexto recuperado do lakehouse:\n\n{context_block}\n\n"
+                    f"Pergunta: {question}",
+                }
+            ],
         )
         return message.content[0].text
 
@@ -766,8 +877,10 @@ def get_llm() -> BaseLLM:
         log.info("Usando LLM Anthropic (%s)", cfg.ai["llm_model"])
         return AnthropicLLM(str(cfg.ai["llm_model"]), api_key)
     if provider == "anthropic":
-        log.warning("llm_provider=anthropic, mas ANTHROPIC_API_KEY nao esta definida. "
-                    "Caindo para o gerador offline.")
+        log.warning(
+            "llm_provider=anthropic, mas ANTHROPIC_API_KEY nao esta definida. "
+            "Caindo para o gerador offline."
+        )
     return MockLLM()
 
 
@@ -775,15 +888,17 @@ def get_llm() -> BaseLLM:
 # 6) Interface de pergunta e resposta
 # ===========================================================================
 
-def ask(question: str, top_k: Optional[int] = None) -> Dict[str, object]:
+
+def ask(question: str, top_k: int | None = None) -> dict[str, object]:
     """Executa o ciclo completo: recuperar -> montar contexto -> gerar."""
     chunks = retrieve(question, top_k)
     answer = get_llm().generate(question, chunks)
     return {
         "pergunta": question,
         "resposta": answer,
-        "fontes": [{"doc_id": c.doc_id, "tabela": c.source_table, "relevancia": c.score}
-                   for c in chunks],
+        "fontes": [
+            {"doc_id": c.doc_id, "tabela": c.source_table, "relevancia": c.score} for c in chunks
+        ],
     }
 
 
@@ -800,7 +915,9 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Pipeline RAG sobre a camada Gold.")
     parser.add_argument("--build", action="store_true", help="(re)constroi o indice vetorial")
     parser.add_argument("--ask", default=None, help="pergunta em linguagem natural")
-    parser.add_argument("--demo", action="store_true", help="roda a bateria de perguntas de exemplo")
+    parser.add_argument(
+        "--demo", action="store_true", help="roda a bateria de perguntas de exemplo"
+    )
     parser.add_argument("--top-k", type=int, default=None, help="numero de trechos recuperados")
     args = parser.parse_args()
 

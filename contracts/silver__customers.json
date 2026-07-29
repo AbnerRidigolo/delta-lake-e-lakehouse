@@ -1,0 +1,103 @@
+{
+  "table": "silver.customers",
+  "frozen_at": "2026-07-29T12:22:14+00:00",
+  "note": "contrato criado automaticamente",
+  "columns": {
+    "customer_id": {
+      "type": "string",
+      "nullable": true
+    },
+    "full_name": {
+      "type": "string",
+      "nullable": true
+    },
+    "cpf_masked": {
+      "type": "string",
+      "nullable": true
+    },
+    "email_masked": {
+      "type": "string",
+      "nullable": true
+    },
+    "customer_key": {
+      "type": "string",
+      "nullable": true
+    },
+    "birth_date": {
+      "type": "date",
+      "nullable": true
+    },
+    "city": {
+      "type": "string",
+      "nullable": true
+    },
+    "state": {
+      "type": "string",
+      "nullable": true
+    },
+    "region": {
+      "type": "string",
+      "nullable": true
+    },
+    "country": {
+      "type": "string",
+      "nullable": true
+    },
+    "signup_date": {
+      "type": "date",
+      "nullable": true
+    },
+    "acquisition_channel": {
+      "type": "string",
+      "nullable": true
+    },
+    "segment": {
+      "type": "string",
+      "nullable": true
+    },
+    "monthly_income": {
+      "type": "double",
+      "nullable": true
+    },
+    "credit_limit": {
+      "type": "double",
+      "nullable": true
+    },
+    "risk_band": {
+      "type": "string",
+      "nullable": true
+    },
+    "status": {
+      "type": "string",
+      "nullable": true
+    },
+    "age": {
+      "type": "bigint",
+      "nullable": true
+    },
+    "age_band": {
+      "type": "string",
+      "nullable": true
+    },
+    "tenure_days": {
+      "type": "int",
+      "nullable": true
+    },
+    "tenure_band": {
+      "type": "string",
+      "nullable": true
+    },
+    "signup_cohort": {
+      "type": "string",
+      "nullable": true
+    },
+    "limit_to_income_ratio": {
+      "type": "double",
+      "nullable": true
+    },
+    "income_band": {
+      "type": "string",
+      "nullable": true
+    }
+  }
+}

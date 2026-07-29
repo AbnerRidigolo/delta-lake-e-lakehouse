@@ -1,0 +1,211 @@
+{
+  "table": "silver.transactions",
+  "frozen_at": "2026-07-29T12:22:14+00:00",
+  "note": "contrato criado automaticamente",
+  "columns": {
+    "merchant_id": {
+      "type": "string",
+      "nullable": true
+    },
+    "customer_id": {
+      "type": "string",
+      "nullable": true
+    },
+    "transaction_id": {
+      "type": "string",
+      "nullable": true
+    },
+    "event_ts": {
+      "type": "timestamp",
+      "nullable": true
+    },
+    "mcc": {
+      "type": "string",
+      "nullable": true
+    },
+    "amount": {
+      "type": "double",
+      "nullable": true
+    },
+    "currency": {
+      "type": "string",
+      "nullable": true
+    },
+    "channel": {
+      "type": "string",
+      "nullable": true
+    },
+    "payment_method": {
+      "type": "string",
+      "nullable": true
+    },
+    "installments": {
+      "type": "int",
+      "nullable": true
+    },
+    "device_id": {
+      "type": "string",
+      "nullable": true
+    },
+    "ip_address": {
+      "type": "string",
+      "nullable": true
+    },
+    "geo_city": {
+      "type": "string",
+      "nullable": true
+    },
+    "geo_state": {
+      "type": "string",
+      "nullable": true
+    },
+    "status": {
+      "type": "string",
+      "nullable": true
+    },
+    "is_fraud": {
+      "type": "int",
+      "nullable": true
+    },
+    "fraud_type": {
+      "type": "string",
+      "nullable": true
+    },
+    "customer_key": {
+      "type": "string",
+      "nullable": true
+    },
+    "customer_segment": {
+      "type": "string",
+      "nullable": true
+    },
+    "customer_risk_band": {
+      "type": "string",
+      "nullable": true
+    },
+    "customer_city": {
+      "type": "string",
+      "nullable": true
+    },
+    "customer_state": {
+      "type": "string",
+      "nullable": true
+    },
+    "customer_income": {
+      "type": "double",
+      "nullable": true
+    },
+    "customer_credit_limit": {
+      "type": "double",
+      "nullable": true
+    },
+    "customer_age_band": {
+      "type": "string",
+      "nullable": true
+    },
+    "customer_tenure_days": {
+      "type": "int",
+      "nullable": true
+    },
+    "merchant_name": {
+      "type": "string",
+      "nullable": true
+    },
+    "merchant_category": {
+      "type": "string",
+      "nullable": true
+    },
+    "merchant_mcc_group": {
+      "type": "string",
+      "nullable": true
+    },
+    "merchant_state": {
+      "type": "string",
+      "nullable": true
+    },
+    "merchant_risk_tier": {
+      "type": "string",
+      "nullable": true
+    },
+    "merchant_risk_score": {
+      "type": "double",
+      "nullable": true
+    },
+    "mcc_intrinsic_risk": {
+      "type": "double",
+      "nullable": true
+    },
+    "mdr_rate": {
+      "type": "double",
+      "nullable": true
+    },
+    "merchant_avg_ticket": {
+      "type": "double",
+      "nullable": true
+    },
+    "is_new_merchant": {
+      "type": "boolean",
+      "nullable": true
+    },
+    "event_date": {
+      "type": "date",
+      "nullable": true
+    },
+    "event_hour": {
+      "type": "int",
+      "nullable": true
+    },
+    "event_dow": {
+      "type": "int",
+      "nullable": true
+    },
+    "event_month": {
+      "type": "string",
+      "nullable": true
+    },
+    "is_weekend": {
+      "type": "boolean",
+      "nullable": true
+    },
+    "is_night": {
+      "type": "boolean",
+      "nullable": true
+    },
+    "is_approved": {
+      "type": "boolean",
+      "nullable": true
+    },
+    "installment_amount": {
+      "type": "double",
+      "nullable": true
+    },
+    "mdr_revenue": {
+      "type": "double",
+      "nullable": true
+    },
+    "chargeback_loss": {
+      "type": "double",
+      "nullable": true
+    },
+    "amount_band": {
+      "type": "string",
+      "nullable": true
+    },
+    "is_card_not_present": {
+      "type": "boolean",
+      "nullable": true
+    },
+    "is_out_of_home_state": {
+      "type": "boolean",
+      "nullable": true
+    },
+    "amount_vs_merchant_avg": {
+      "type": "double",
+      "nullable": true
+    },
+    "amount_to_income_ratio": {
+      "type": "double",
+      "nullable": true
+    }
+  }
+}

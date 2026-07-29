@@ -70,9 +70,11 @@ def build_stream(spark: SparkSession, max_files_per_trigger: int = 2) -> DataFra
         .withColumn("_source_file", F.col("_metadata.file_path"))
         .withColumn("_ingestion_date", F.current_date())
         # Marca a latencia de ingestao: diferenca entre o evento e a chegada.
-        .withColumn("_ingestion_lag_seconds",
-                    F.unix_timestamp(F.current_timestamp())
-                    - F.unix_timestamp(F.to_timestamp(F.col("event_ts"))))
+        .withColumn(
+            "_ingestion_lag_seconds",
+            F.unix_timestamp(F.current_timestamp())
+            - F.unix_timestamp(F.to_timestamp(F.col("event_ts"))),
+        )
     )
 
 
@@ -109,21 +111,28 @@ def run(continuous: bool = False, processing_time: str = "10 seconds") -> None:
         register_table(spark, cfg.full_table_name("bronze", "transactions"), bronze_path)
 
         stream_rows = (
-            spark.read.format("delta").load(bronze_path)
-            .where(F.col("_source_system") == SOURCE_SYSTEM).count()
+            spark.read.format("delta")
+            .load(bronze_path)
+            .where(F.col("_source_system") == SOURCE_SYSTEM)
+            .count()
         )
         total_rows = spark.read.format("delta").load(bronze_path).count()
-        log.info("bronze.transactions: %s linhas via streaming | %s no total",
-                 stream_rows, total_rows)
+        log.info(
+            "bronze.transactions: %s linhas via streaming | %s no total", stream_rows, total_rows
+        )
         log.info("Progresso do ultimo micro-batch: %s", query.lastProgress)
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Ingestao streaming de transacoes -> Bronze.")
-    parser.add_argument("--continuous", action="store_true",
-                        help="mantem o stream ativo em vez de encerrar apos o backlog")
-    parser.add_argument("--processing-time", default="10 seconds",
-                        help="intervalo do trigger no modo continuo")
+    parser.add_argument(
+        "--continuous",
+        action="store_true",
+        help="mantem o stream ativo em vez de encerrar apos o backlog",
+    )
+    parser.add_argument(
+        "--processing-time", default="10 seconds", help="intervalo do trigger no modo continuo"
+    )
     args = parser.parse_args()
     run(continuous=args.continuous, processing_time=args.processing_time)
 

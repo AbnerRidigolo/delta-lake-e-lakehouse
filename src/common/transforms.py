@@ -8,7 +8,7 @@ mais recente e mascarar dado pessoal.
 
 from __future__ import annotations
 
-from typing import List, Sequence
+from collections.abc import Sequence
 
 from pyspark.sql import Column, DataFrame, Window
 from pyspark.sql import functions as F
@@ -103,8 +103,13 @@ def mask_document(column: str) -> Column:
     digits = F.regexp_replace(F.col(column), r"\D", "")
     return F.when(
         F.length(digits) == 11,
-        F.concat(F.lit("***."), F.substring(digits, 4, 3), F.lit("."),
-                 F.substring(digits, 7, 3), F.lit("-**")),
+        F.concat(
+            F.lit("***."),
+            F.substring(digits, 4, 3),
+            F.lit("."),
+            F.substring(digits, 7, 3),
+            F.lit("-**"),
+        ),
     ).otherwise(F.lit("***"))
 
 
@@ -117,8 +122,9 @@ def hash_pii(column: str, salt: str = "neopag") -> Column:
     return F.sha2(F.concat(F.lit(salt), F.coalesce(F.col(column), F.lit(""))), 256)
 
 
-def split_valid_invalid(df: DataFrame, condition: Column, reason_expr: Column
-                        ) -> tuple[DataFrame, DataFrame]:
+def split_valid_invalid(
+    df: DataFrame, condition: Column, reason_expr: Column
+) -> tuple[DataFrame, DataFrame]:
     """Separa o DataFrame em (validos, rejeitados-com-motivo).
 
     Registros rejeitados nao sao descartados: vao para uma tabela de quarentena,
@@ -130,7 +136,14 @@ def split_valid_invalid(df: DataFrame, condition: Column, reason_expr: Column
     return valid, invalid
 
 
-def audit_columns() -> List[str]:
+def audit_columns() -> list[str]:
     """Colunas tecnicas adicionadas pela ingestao (uteis para excluir de joins)."""
-    return ["_ingested_at", "_source_system", "_pipeline_run_id", "_source_file",
-            "_ingestion_date", "_corrupt_record", "_ingestion_lag_seconds"]
+    return [
+        "_ingested_at",
+        "_source_system",
+        "_pipeline_run_id",
+        "_source_file",
+        "_ingestion_date",
+        "_corrupt_record",
+        "_ingestion_lag_seconds",
+    ]

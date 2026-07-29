@@ -13,7 +13,7 @@
       "phone",
       "birth_date"
     ],
-    "path": "/home/user/delta-lake-e-lakehouse/data/bronze/customers",
+    "path": "data/bronze/customers",
     "owner": "squad-customer-360",
     "steward": "data-governance",
     "acesso": "engenharia_dados,dpo"
@@ -26,7 +26,7 @@
     "description": "Cadastro bruto de estabelecimentos credenciados.",
     "sla_hours": 24,
     "pii_columns": [],
-    "path": "/home/user/delta-lake-e-lakehouse/data/bronze/merchants",
+    "path": "data/bronze/merchants",
     "owner": "squad-payments",
     "steward": "data-governance",
     "acesso": "analistas,engenharia_dados,ciencia_dados"
@@ -42,7 +42,7 @@
       "ip_address",
       "device_id"
     ],
-    "path": "/home/user/delta-lake-e-lakehouse/data/bronze/transactions",
+    "path": "data/bronze/transactions",
     "owner": "squad-payments",
     "steward": "data-governance",
     "acesso": "engenharia_dados,ciencia_dados,risco"
@@ -55,7 +55,7 @@
     "description": "Contratos de credito brutos (emprestimo pessoal, cartao, consignado, BNPL).",
     "sla_hours": 24,
     "pii_columns": [],
-    "path": "/home/user/delta-lake-e-lakehouse/data/bronze/credit_contracts",
+    "path": "data/bronze/credit_contracts",
     "owner": "squad-credit-risk",
     "steward": "risk-office",
     "acesso": "engenharia_dados,ciencia_dados,risco"
@@ -72,7 +72,7 @@
       "cpf_masked",
       "email_masked"
     ],
-    "path": "/home/user/delta-lake-e-lakehouse/data/silver/customers",
+    "path": "data/silver/customers",
     "owner": "squad-customer-360",
     "steward": "data-governance",
     "acesso": "engenharia_dados,dpo"
@@ -85,7 +85,7 @@
     "description": "Estabelecimentos normalizados e enriquecidos com categoria de MCC.",
     "sla_hours": 24,
     "pii_columns": [],
-    "path": "/home/user/delta-lake-e-lakehouse/data/silver/merchants",
+    "path": "data/silver/merchants",
     "owner": "squad-payments",
     "steward": "data-governance",
     "acesso": "analistas,engenharia_dados,ciencia_dados"
@@ -98,7 +98,7 @@
     "description": "Transacoes limpas, tipadas, deduplicadas e enriquecidas com cliente e merchant.",
     "sla_hours": 1,
     "pii_columns": [],
-    "path": "/home/user/delta-lake-e-lakehouse/data/silver/transactions",
+    "path": "data/silver/transactions",
     "owner": "squad-payments",
     "steward": "data-governance",
     "acesso": "engenharia_dados,ciencia_dados,risco"
@@ -111,7 +111,7 @@
     "description": "Contratos de credito tipados, com faixa de atraso e provisao calculada.",
     "sla_hours": 24,
     "pii_columns": [],
-    "path": "/home/user/delta-lake-e-lakehouse/data/silver/credit_contracts",
+    "path": "data/silver/credit_contracts",
     "owner": "squad-credit-risk",
     "steward": "risk-office",
     "acesso": "engenharia_dados,ciencia_dados,risco"
@@ -124,7 +124,7 @@
     "description": "Visao unica do cliente: RFM, exposicao de credito, inadimplencia, churn e score agregado.",
     "sla_hours": 24,
     "pii_columns": [],
-    "path": "/home/user/delta-lake-e-lakehouse/data/gold/customer_360",
+    "path": "data/gold/customer_360",
     "owner": "squad-customer-360",
     "steward": "data-governance",
     "acesso": "engenharia_dados,ciencia_dados,risco"
@@ -137,7 +137,7 @@
     "description": "Transacoes com sinais de fraude por regra (velocity, valor atipico, madrugada, device novo).",
     "sla_hours": 1,
     "pii_columns": [],
-    "path": "/home/user/delta-lake-e-lakehouse/data/gold/transaction_fraud_signals",
+    "path": "data/gold/transaction_fraud_signals",
     "owner": "squad-payments",
     "steward": "data-governance",
     "acesso": "engenharia_dados,ciencia_dados,risco"
@@ -150,7 +150,7 @@
     "description": "Carteira de credito por safra/produto com EAD, PD proxy, LGD e perda esperada.",
     "sla_hours": 24,
     "pii_columns": [],
-    "path": "/home/user/delta-lake-e-lakehouse/data/gold/credit_risk_portfolio",
+    "path": "data/gold/credit_risk_portfolio",
     "owner": "squad-credit-risk",
     "steward": "risk-office",
     "acesso": "engenharia_dados,ciencia_dados,risco"
@@ -163,7 +163,7 @@
     "description": "KPIs financeiros diarios: receita (MDR + juros), perdas, recuperacao, chargeback e aprovacao.",
     "sla_hours": 6,
     "pii_columns": [],
-    "path": "/home/user/delta-lake-e-lakehouse/data/gold/financial_kpis_daily",
+    "path": "data/gold/financial_kpis_daily",
     "owner": "squad-fpna",
     "steward": "controladoria",
     "acesso": "engenharia_dados,ciencia_dados,risco"
@@ -176,7 +176,7 @@
     "description": "Desempenho e risco por estabelecimento: TPV, ticket medio, taxa de chargeback e de fraude.",
     "sla_hours": 24,
     "pii_columns": [],
-    "path": "/home/user/delta-lake-e-lakehouse/data/gold/merchant_performance",
+    "path": "data/gold/merchant_performance",
     "owner": "squad-payments",
     "steward": "data-governance",
     "acesso": "analistas,engenharia_dados,ciencia_dados"
@@ -189,7 +189,7 @@
     "description": "Features de cliente com timestamp de referencia para treino point-in-time.",
     "sla_hours": 24,
     "pii_columns": [],
-    "path": "/home/user/delta-lake-e-lakehouse/data/feature_store/customer_features",
+    "path": "data/feature_store/customer_features",
     "owner": "squad-ml-platform",
     "steward": "data-governance",
     "acesso": "engenharia_dados,ciencia_dados,risco"
@@ -202,7 +202,7 @@
     "description": "Features transacionais para o modelo de deteccao de fraude.",
     "sla_hours": 1,
     "pii_columns": [],
-    "path": "/home/user/delta-lake-e-lakehouse/data/feature_store/transaction_features",
+    "path": "data/feature_store/transaction_features",
     "owner": "squad-ml-platform",
     "steward": "data-governance",
     "acesso": "engenharia_dados,ciencia_dados,risco"

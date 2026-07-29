@@ -1,0 +1,231 @@
+{
+  "table": "gold.transaction_fraud_signals",
+  "frozen_at": "2026-07-29T12:22:14+00:00",
+  "note": "contrato criado automaticamente",
+  "columns": {
+    "transaction_id": {
+      "type": "string",
+      "nullable": true
+    },
+    "event_ts": {
+      "type": "timestamp",
+      "nullable": true
+    },
+    "event_date": {
+      "type": "date",
+      "nullable": true
+    },
+    "event_hour": {
+      "type": "int",
+      "nullable": true
+    },
+    "customer_id": {
+      "type": "string",
+      "nullable": true
+    },
+    "customer_key": {
+      "type": "string",
+      "nullable": true
+    },
+    "merchant_id": {
+      "type": "string",
+      "nullable": true
+    },
+    "merchant_name": {
+      "type": "string",
+      "nullable": true
+    },
+    "merchant_category": {
+      "type": "string",
+      "nullable": true
+    },
+    "merchant_mcc_group": {
+      "type": "string",
+      "nullable": true
+    },
+    "merchant_risk_tier": {
+      "type": "string",
+      "nullable": true
+    },
+    "merchant_risk_score": {
+      "type": "double",
+      "nullable": true
+    },
+    "mcc_intrinsic_risk": {
+      "type": "double",
+      "nullable": true
+    },
+    "customer_segment": {
+      "type": "string",
+      "nullable": true
+    },
+    "customer_risk_band": {
+      "type": "string",
+      "nullable": true
+    },
+    "amount": {
+      "type": "double",
+      "nullable": true
+    },
+    "installments": {
+      "type": "int",
+      "nullable": true
+    },
+    "channel": {
+      "type": "string",
+      "nullable": true
+    },
+    "payment_method": {
+      "type": "string",
+      "nullable": true
+    },
+    "status": {
+      "type": "string",
+      "nullable": true
+    },
+    "device_id": {
+      "type": "string",
+      "nullable": true
+    },
+    "geo_city": {
+      "type": "string",
+      "nullable": true
+    },
+    "geo_state": {
+      "type": "string",
+      "nullable": true
+    },
+    "is_card_not_present": {
+      "type": "boolean",
+      "nullable": true
+    },
+    "is_out_of_home_state": {
+      "type": "boolean",
+      "nullable": true
+    },
+    "is_night": {
+      "type": "boolean",
+      "nullable": true
+    },
+    "is_weekend": {
+      "type": "boolean",
+      "nullable": true
+    },
+    "amount_vs_merchant_avg": {
+      "type": "double",
+      "nullable": true
+    },
+    "amount_to_income_ratio": {
+      "type": "double",
+      "nullable": true
+    },
+    "txn_count_10min": {
+      "type": "bigint",
+      "nullable": true
+    },
+    "txn_count_24h": {
+      "type": "bigint",
+      "nullable": true
+    },
+    "amount_sum_24h": {
+      "type": "double",
+      "nullable": true
+    },
+    "distinct_devices_24h": {
+      "type": "int",
+      "nullable": true
+    },
+    "distinct_states_24h": {
+      "type": "int",
+      "nullable": true
+    },
+    "seconds_since_prev_txn": {
+      "type": "bigint",
+      "nullable": true
+    },
+    "amount_zscore_customer": {
+      "type": "double",
+      "nullable": true
+    },
+    "is_new_device": {
+      "type": "boolean",
+      "nullable": true
+    },
+    "customer_txn_seq": {
+      "type": "int",
+      "nullable": true
+    },
+    "rule_velocity_burst": {
+      "type": "boolean",
+      "nullable": true
+    },
+    "rule_new_device": {
+      "type": "boolean",
+      "nullable": true
+    },
+    "rule_high_amount": {
+      "type": "boolean",
+      "nullable": true
+    },
+    "rule_device_dispersion": {
+      "type": "boolean",
+      "nullable": true
+    },
+    "rule_amount_outlier_merchant": {
+      "type": "boolean",
+      "nullable": true
+    },
+    "rule_cnp_high_ticket": {
+      "type": "boolean",
+      "nullable": true
+    },
+    "rule_income_incompatible": {
+      "type": "boolean",
+      "nullable": true
+    },
+    "rule_risky_merchant": {
+      "type": "boolean",
+      "nullable": true
+    },
+    "rule_geo_jump": {
+      "type": "boolean",
+      "nullable": true
+    },
+    "rule_night_activity": {
+      "type": "boolean",
+      "nullable": true
+    },
+    "triggered_rules": {
+      "type": "array<string>",
+      "nullable": true
+    },
+    "triggered_rules_count": {
+      "type": "int",
+      "nullable": true
+    },
+    "fraud_score_rule": {
+      "type": "int",
+      "nullable": true
+    },
+    "risk_level": {
+      "type": "string",
+      "nullable": true
+    },
+    "recommended_action": {
+      "type": "string",
+      "nullable": true
+    },
+    "is_fraud": {
+      "type": "int",
+      "nullable": true
+    },
+    "fraud_type": {
+      "type": "string",
+      "nullable": true
+    },
+    "chargeback_loss": {
+      "type": "double",
+      "nullable": true
+    }
+  }
+}

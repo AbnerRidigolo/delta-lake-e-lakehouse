@@ -1,0 +1,123 @@
+{
+  "table": "feature_store.customer_features",
+  "frozen_at": "2026-07-29T12:22:14+00:00",
+  "note": "contrato criado automaticamente",
+  "columns": {
+    "customer_id": {
+      "type": "string",
+      "nullable": true
+    },
+    "feature_month": {
+      "type": "string",
+      "nullable": true
+    },
+    "cf_txn_count_lifetime": {
+      "type": "bigint",
+      "nullable": true
+    },
+    "cf_tpv_lifetime": {
+      "type": "double",
+      "nullable": true
+    },
+    "cf_chargebacks_lifetime": {
+      "type": "bigint",
+      "nullable": true
+    },
+    "cf_frauds_lifetime": {
+      "type": "bigint",
+      "nullable": true
+    },
+    "cf_declines_lifetime": {
+      "type": "bigint",
+      "nullable": true
+    },
+    "cf_active_months": {
+      "type": "bigint",
+      "nullable": true
+    },
+    "cf_txn_count_3m": {
+      "type": "bigint",
+      "nullable": true
+    },
+    "cf_tpv_3m": {
+      "type": "double",
+      "nullable": true
+    },
+    "cf_avg_ticket_3m": {
+      "type": "double",
+      "nullable": true
+    },
+    "cf_max_ticket_3m": {
+      "type": "double",
+      "nullable": true
+    },
+    "cf_distinct_merchants_3m": {
+      "type": "double",
+      "nullable": true
+    },
+    "cf_distinct_devices_3m": {
+      "type": "double",
+      "nullable": true
+    },
+    "cf_cnp_share_3m": {
+      "type": "double",
+      "nullable": true
+    },
+    "cf_night_share_3m": {
+      "type": "double",
+      "nullable": true
+    },
+    "cf_pix_share_3m": {
+      "type": "double",
+      "nullable": true
+    },
+    "cf_chargeback_rate_lifetime": {
+      "type": "double",
+      "nullable": true
+    },
+    "cf_decline_rate_lifetime": {
+      "type": "double",
+      "nullable": true
+    },
+    "cf_avg_ticket_lifetime": {
+      "type": "double",
+      "nullable": true
+    },
+    "cf_segment": {
+      "type": "string",
+      "nullable": true
+    },
+    "cf_risk_band": {
+      "type": "string",
+      "nullable": true
+    },
+    "cf_state": {
+      "type": "string",
+      "nullable": true
+    },
+    "cf_age": {
+      "type": "bigint",
+      "nullable": true
+    },
+    "cf_monthly_income": {
+      "type": "double",
+      "nullable": true
+    },
+    "cf_credit_limit": {
+      "type": "double",
+      "nullable": true
+    },
+    "cf_limit_to_income": {
+      "type": "double",
+      "nullable": true
+    },
+    "cf_tenure_days": {
+      "type": "int",
+      "nullable": true
+    },
+    "cf_acquisition_channel": {
+      "type": "string",
+      "nullable": true
+    }
+  }
+}

@@ -27,7 +27,6 @@ Execucao:
 from __future__ import annotations
 
 import argparse
-from typing import Optional
 
 from pyspark.sql import DataFrame, SparkSession
 from pyspark.sql import functions as F
@@ -50,13 +49,15 @@ VALID_STATUS = ["approved", "declined", "reversed", "chargeback"]
 CARD_NOT_PRESENT_CHANNELS = ["ecommerce", "wallet"]
 
 
-def transform(spark: SparkSession, bronze: DataFrame, customers: DataFrame,
-              merchants: DataFrame) -> tuple[DataFrame, DataFrame]:
+def transform(
+    spark: SparkSession, bronze: DataFrame, customers: DataFrame, merchants: DataFrame
+) -> tuple[DataFrame, DataFrame]:
     """Limpa, valida e enriquece as transacoes. Retorna (silver, rejeitados)."""
 
     # --- 1) Deduplicacao ------------------------------------------------------
     deduped = T.deduplicate(
-        bronze, keys=["transaction_id"],
+        bronze,
+        keys=["transaction_id"],
         order_by=[F.col("_ingested_at").desc(), F.col("source_extracted_at").desc_nulls_last()],
     )
 
@@ -79,7 +80,8 @@ def transform(spark: SparkSession, bronze: DataFrame, customers: DataFrame,
         T.normalize_text("status").alias("status"),
         F.coalesce(T.safe_int("is_fraud"), F.lit(0)).alias("is_fraud"),
         F.when(F.trim(F.col("fraud_type")) == "", None)
-         .otherwise(T.normalize_text("fraud_type")).alias("fraud_type"),
+        .otherwise(T.normalize_text("fraud_type"))
+        .alias("fraud_type"),
         F.col("_source_system"),
         F.col("_ingested_at"),
     )
@@ -136,27 +138,37 @@ def transform(spark: SparkSession, bronze: DataFrame, customers: DataFrame,
         F.col("is_new_merchant"),
     )
 
-    enriched = (
-        valid.join(F.broadcast(customer_dim), on="customer_id", how="left")
-             .join(F.broadcast(merchant_dim), on="merchant_id", how="left")
+    enriched = valid.join(F.broadcast(customer_dim), on="customer_id", how="left").join(
+        F.broadcast(merchant_dim), on="merchant_id", how="left"
     )
 
     # Chave orfa: a transacao existe mas o cliente nao esta no cadastro.
     # Em uma fintech isso e incidente de integracao, nao "dado ruim aceitavel".
     has_references = F.col("customer_key").isNotNull() & F.col("mdr_rate").isNotNull()
-    orphan_reason = (
-        F.when(F.col("customer_key").isNull(), "cliente inexistente no cadastro")
-        .otherwise("estabelecimento inexistente no cadastro")
-    )
+    orphan_reason = F.when(
+        F.col("customer_key").isNull(), "cliente inexistente no cadastro"
+    ).otherwise("estabelecimento inexistente no cadastro")
     referenced, rejected_orphan = T.split_valid_invalid(enriched, has_references, orphan_reason)
 
     rejected = rejected_technical.select(
-        "transaction_id", "customer_id", "merchant_id", "amount", "channel",
-        "status", "_reject_reason", "_source_system",
+        "transaction_id",
+        "customer_id",
+        "merchant_id",
+        "amount",
+        "channel",
+        "status",
+        "_reject_reason",
+        "_source_system",
     ).unionByName(
         rejected_orphan.select(
-            "transaction_id", "customer_id", "merchant_id", "amount", "channel",
-            "status", "_reject_reason", "_source_system",
+            "transaction_id",
+            "customer_id",
+            "merchant_id",
+            "amount",
+            "channel",
+            "status",
+            "_reject_reason",
+            "_source_system",
         )
     )
 
@@ -172,39 +184,53 @@ def transform(spark: SparkSession, bronze: DataFrame, customers: DataFrame,
         .withColumn("is_night", F.col("event_hour").between(0, 5))
         # -- financeiro
         .withColumn("is_approved", F.col("status") == "approved")
-        .withColumn("installment_amount",
-                    F.round(F.col("amount") / F.greatest(F.col("installments"), F.lit(1)), 2))
+        .withColumn(
+            "installment_amount",
+            F.round(F.col("amount") / F.greatest(F.col("installments"), F.lit(1)), 2),
+        )
         # Receita de adquirencia: MDR aplicado apenas sobre transacao aprovada.
-        .withColumn("mdr_revenue",
-                    F.when(F.col("status") == "approved",
-                           F.round(F.col("amount") * F.col("mdr_rate"), 4)).otherwise(F.lit(0.0)))
+        .withColumn(
+            "mdr_revenue",
+            F.when(
+                F.col("status") == "approved", F.round(F.col("amount") * F.col("mdr_rate"), 4)
+            ).otherwise(F.lit(0.0)),
+        )
         # Perda bruta: chargeback devolve o valor ao portador.
-        .withColumn("chargeback_loss",
-                    F.when(F.col("status") == "chargeback", F.col("amount")).otherwise(F.lit(0.0)))
-        .withColumn("amount_band",
-                    F.when(F.col("amount") < 50, "ate_50")
-                    .when(F.col("amount") < 200, "50_200")
-                    .when(F.col("amount") < 1000, "200_1k")
-                    .when(F.col("amount") < 5000, "1k_5k")
-                    .otherwise("5k+"))
+        .withColumn(
+            "chargeback_loss",
+            F.when(F.col("status") == "chargeback", F.col("amount")).otherwise(F.lit(0.0)),
+        )
+        .withColumn(
+            "amount_band",
+            F.when(F.col("amount") < 50, "ate_50")
+            .when(F.col("amount") < 200, "50_200")
+            .when(F.col("amount") < 1000, "200_1k")
+            .when(F.col("amount") < 5000, "1k_5k")
+            .otherwise("5k+"),
+        )
         # -- comportamento / risco
         .withColumn("is_card_not_present", F.col("channel").isin(CARD_NOT_PRESENT_CHANNELS))
-        .withColumn("is_out_of_home_state",
-                    F.col("geo_state").isNotNull()
-                    & (F.col("geo_state") != F.col("customer_state")))
+        .withColumn(
+            "is_out_of_home_state",
+            F.col("geo_state").isNotNull() & (F.col("geo_state") != F.col("customer_state")),
+        )
         # Quantas vezes a compra excede o ticket medio do lojista: outlier local.
-        .withColumn("amount_vs_merchant_avg",
-                    F.round(F.col("amount") / F.greatest(F.col("merchant_avg_ticket"), F.lit(1.0)), 3))
+        .withColumn(
+            "amount_vs_merchant_avg",
+            F.round(F.col("amount") / F.greatest(F.col("merchant_avg_ticket"), F.lit(1.0)), 3),
+        )
         # Quanto a compra representa da renda mensal do cliente.
-        .withColumn("amount_to_income_ratio",
-                    F.round(F.col("amount") / F.greatest(F.col("customer_income"), F.lit(1.0)), 5))
+        .withColumn(
+            "amount_to_income_ratio",
+            F.round(F.col("amount") / F.greatest(F.col("customer_income"), F.lit(1.0)), 5),
+        )
         .withColumn("_silver_processed_at", F.current_timestamp())
     )
 
     return silver, rejected
 
 
-def run(reprocess_date: Optional[str] = None) -> int:
+def run(reprocess_date: str | None = None) -> int:
     """Executa a carga Silver de transacoes.
 
     Args:
@@ -227,8 +253,12 @@ def run(reprocess_date: Optional[str] = None) -> int:
         if reprocess_date:
             silver = silver.where(F.col("event_date") == F.lit(reprocess_date))
             write_delta(
-                silver, silver_path, mode="overwrite", partition_by=["event_date"],
-                replace_where=f"event_date = '{reprocess_date}'", merge_schema=True,
+                silver,
+                silver_path,
+                mode="overwrite",
+                partition_by=["event_date"],
+                replace_where=f"event_date = '{reprocess_date}'",
+                merge_schema=True,
                 comment=f"reprocessamento pontual de {reprocess_date}",
             )
             log.info("Reprocessamento seletivo concluido para %s", reprocess_date)
@@ -236,8 +266,11 @@ def run(reprocess_date: Optional[str] = None) -> int:
             # `repartition` pela coluna de particao evita centenas de arquivos
             # minusculos (o classico "small files problem" do data lake).
             write_delta(
-                silver.repartition("event_date"), silver_path, mode="overwrite",
-                partition_by=["event_date"], overwrite_schema=True,
+                silver.repartition("event_date"),
+                silver_path,
+                mode="overwrite",
+                partition_by=["event_date"],
+                overwrite_schema=True,
                 comment="bronze.transactions -> silver.transactions",
             )
 
@@ -246,7 +279,9 @@ def run(reprocess_date: Optional[str] = None) -> int:
 
         result = spark.read.format("delta").load(silver_path)
         dq.run_quality_checks(
-            spark, result, dataset=f"silver.{TABLE}",
+            spark,
+            result,
+            dataset=f"silver.{TABLE}",
             expectations=[
                 dq.not_null("transaction_id"),
                 dq.unique("transaction_id"),
@@ -261,15 +296,22 @@ def run(reprocess_date: Optional[str] = None) -> int:
             ],
         )
         count = result.count()
-        log.info("silver.%s: %s transacoes | %s particoes de data", TABLE, count,
-                 result.select("event_date").distinct().count())
+        log.info(
+            "silver.%s: %s transacoes | %s particoes de data",
+            TABLE,
+            count,
+            result.select("event_date").distinct().count(),
+        )
         return count
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Carga silver.transactions.")
-    parser.add_argument("--reprocess-date", default=None,
-                        help="reprocessa apenas a data informada (YYYY-MM-DD) via replaceWhere")
+    parser.add_argument(
+        "--reprocess-date",
+        default=None,
+        help="reprocessa apenas a data informada (YYYY-MM-DD) via replaceWhere",
+    )
     args = parser.parse_args()
     run(args.reprocess_date)
 

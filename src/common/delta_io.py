@@ -17,8 +17,8 @@ from __future__ import annotations
 import json
 import os
 import uuid
+from collections.abc import Iterable
 from datetime import datetime, timezone
-from typing import Iterable, Optional
 
 from pyspark.sql import DataFrame, SparkSession
 from pyspark.sql import functions as F
@@ -45,11 +45,11 @@ def write_delta(
     df: DataFrame,
     path: str,
     mode: str = "overwrite",
-    partition_by: Optional[Iterable[str]] = None,
+    partition_by: Iterable[str] | None = None,
     merge_schema: bool = False,
     overwrite_schema: bool = False,
-    replace_where: Optional[str] = None,
-    comment: Optional[str] = None,
+    replace_where: str | None = None,
+    comment: str | None = None,
 ) -> None:
     """Escreve um DataFrame como tabela Delta.
 
@@ -85,8 +85,9 @@ def write_delta(
     log.info("Delta escrito em %s (mode=%s, partition_by=%s)", path, mode, partition_by)
 
 
-def read_delta(spark: SparkSession, path: str, version: Optional[int] = None,
-               timestamp: Optional[str] = None) -> DataFrame:
+def read_delta(
+    spark: SparkSession, path: str, version: int | None = None, timestamp: str | None = None
+) -> DataFrame:
     """Le uma tabela Delta, opcionalmente em uma versao/timestamp passado.
 
     Passar `version` ou `timestamp` e exatamente o **time travel** do Delta:

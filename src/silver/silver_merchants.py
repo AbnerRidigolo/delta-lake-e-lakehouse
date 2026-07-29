@@ -31,11 +31,19 @@ TABLE = "merchants"
 # Agrupamento macro de MCC. Em producao viria de uma tabela de dominio mantida
 # pelo time de negocio (ou do proprio Unity Catalog como tabela de referencia).
 MCC_GROUPS = {
-    "supermercado": "essencial", "farmacia": "essencial", "saude": "essencial",
-    "posto_combustivel": "mobilidade", "mobilidade_urbana": "mobilidade",
-    "restaurante": "consumo", "vestuario": "consumo", "varejo_diverso": "consumo",
-    "eletronicos": "alto_ticket", "joalheria": "alto_ticket", "agencia_viagem": "alto_ticket",
-    "servicos_digitais": "digital", "apostas_online": "digital_risco",
+    "supermercado": "essencial",
+    "farmacia": "essencial",
+    "saude": "essencial",
+    "posto_combustivel": "mobilidade",
+    "mobilidade_urbana": "mobilidade",
+    "restaurante": "consumo",
+    "vestuario": "consumo",
+    "varejo_diverso": "consumo",
+    "eletronicos": "alto_ticket",
+    "joalheria": "alto_ticket",
+    "agencia_viagem": "alto_ticket",
+    "servicos_digitais": "digital",
+    "apostas_online": "digital_risco",
     "cripto_cambio": "digital_risco",
 }
 
@@ -57,7 +65,8 @@ def _mcc_reference(spark: SparkSession) -> DataFrame:
 
 def transform(spark: SparkSession, bronze: DataFrame) -> tuple[DataFrame, DataFrame]:
     deduped = T.deduplicate(
-        bronze, keys=["merchant_id"],
+        bronze,
+        keys=["merchant_id"],
         order_by=[F.col("source_extracted_at").desc_nulls_last(), F.col("_ingested_at").desc()],
     )
 
@@ -82,7 +91,7 @@ def transform(spark: SparkSession, bronze: DataFrame) -> tuple[DataFrame, DataFr
     is_valid = (
         F.col("merchant_id").isNotNull()
         & F.col("mdr_rate").isNotNull()
-        & (F.col("mdr_rate").between(0.0, 0.15))   # MDR fora disso e erro de origem
+        & (F.col("mdr_rate").between(0.0, 0.15))  # MDR fora disso e erro de origem
         & F.col("avg_ticket").isNotNull()
         & (F.col("avg_ticket") > 0)
     )
@@ -105,10 +114,12 @@ def transform(spark: SparkSession, bronze: DataFrame) -> tuple[DataFrame, DataFr
         # Lojista novo tem menos historico -> mais incerteza no monitoramento.
         .withColumn("is_new_merchant", F.col("merchant_age_days") < 180)
         # Reclassifica o risco combinando o score da adquirente com o risco do MCC.
-        .withColumn("risk_tier",
-                    F.when(F.col("risk_score") >= 4.0, "alto")
-                    .when(F.col("risk_score") >= 2.0, "medio")
-                    .otherwise("baixo"))
+        .withColumn(
+            "risk_tier",
+            F.when(F.col("risk_score") >= 4.0, "alto")
+            .when(F.col("risk_score") >= 2.0, "medio")
+            .otherwise("baixo"),
+        )
         .withColumn("_silver_processed_at", F.current_timestamp())
         .drop("mcc_category")
     )
@@ -124,14 +135,21 @@ def run() -> int:
         silver, rejected = transform(spark, bronze)
 
         silver_path = cfg.table_path("silver", TABLE)
-        write_delta(silver, silver_path, mode="overwrite", overwrite_schema=True,
-                    comment="bronze.merchants -> silver.merchants")
+        write_delta(
+            silver,
+            silver_path,
+            mode="overwrite",
+            overwrite_schema=True,
+            comment="bronze.merchants -> silver.merchants",
+        )
         register_table(spark, cfg.full_table_name("silver", TABLE), silver_path)
         quarantine(rejected, TABLE)
 
         result = spark.read.format("delta").load(silver_path)
         dq.run_quality_checks(
-            spark, result, dataset=f"silver.{TABLE}",
+            spark,
+            result,
+            dataset=f"silver.{TABLE}",
             expectations=[
                 dq.not_null("merchant_id"),
                 dq.unique("merchant_id"),

@@ -1,0 +1,139 @@
+{
+  "table": "gold.financial_kpis_daily",
+  "frozen_at": "2026-07-29T12:22:14+00:00",
+  "note": "contrato criado automaticamente",
+  "columns": {
+    "event_date": {
+      "type": "date",
+      "nullable": true
+    },
+    "txn_count": {
+      "type": "bigint",
+      "nullable": true
+    },
+    "txn_approved": {
+      "type": "bigint",
+      "nullable": true
+    },
+    "txn_declined": {
+      "type": "bigint",
+      "nullable": true
+    },
+    "txn_chargeback": {
+      "type": "bigint",
+      "nullable": true
+    },
+    "tpv": {
+      "type": "double",
+      "nullable": true
+    },
+    "avg_ticket": {
+      "type": "double",
+      "nullable": true
+    },
+    "revenue_mdr": {
+      "type": "double",
+      "nullable": true
+    },
+    "loss_chargeback": {
+      "type": "double",
+      "nullable": true
+    },
+    "active_customers": {
+      "type": "bigint",
+      "nullable": true
+    },
+    "active_merchants": {
+      "type": "bigint",
+      "nullable": true
+    },
+    "fraud_txn_count": {
+      "type": "bigint",
+      "nullable": true
+    },
+    "loss_fraud": {
+      "type": "double",
+      "nullable": true
+    },
+    "pix_share": {
+      "type": "double",
+      "nullable": true
+    },
+    "cnp_share": {
+      "type": "double",
+      "nullable": true
+    },
+    "revenue_interest": {
+      "type": "double",
+      "nullable": true
+    },
+    "credit_portfolio_balance": {
+      "type": "double",
+      "nullable": true
+    },
+    "active_contracts": {
+      "type": "bigint",
+      "nullable": true
+    },
+    "loss_write_off": {
+      "type": "double",
+      "nullable": true
+    },
+    "write_off_contracts": {
+      "type": "bigint",
+      "nullable": true
+    },
+    "recovery_amount": {
+      "type": "double",
+      "nullable": true
+    },
+    "revenue_total": {
+      "type": "double",
+      "nullable": true
+    },
+    "loss_total": {
+      "type": "double",
+      "nullable": true
+    },
+    "net_result": {
+      "type": "double",
+      "nullable": true
+    },
+    "net_margin": {
+      "type": "double",
+      "nullable": true
+    },
+    "approval_rate": {
+      "type": "double",
+      "nullable": true
+    },
+    "chargeback_rate": {
+      "type": "double",
+      "nullable": true
+    },
+    "fraud_rate_volume": {
+      "type": "double",
+      "nullable": true
+    },
+    "fraud_rate_value": {
+      "type": "double",
+      "nullable": true
+    },
+    "take_rate": {
+      "type": "double",
+      "nullable": true
+    },
+    "year_month": {
+      "type": "string",
+      "nullable": true
+    },
+    "day_of_week": {
+      "type": "string",
+      "nullable": true
+    },
+    "is_weekend": {
+      "type": "boolean",
+      "nullable": true
+    }
+  }
+}

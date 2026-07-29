@@ -56,64 +56,92 @@ def build(spark: SparkSession) -> DataFrame:
         F.sum(F.when(F.col("status") == "chargeback", 1).otherwise(0)).alias("chargeback_count"),
         F.round(F.sum("chargeback_loss"), 2).alias("chargeback_amount"),
         F.sum(F.when(F.col("is_fraud") == 1, 1).otherwise(0)).alias("fraud_txn_count"),
-        F.round(F.sum(F.when(F.col("is_fraud") == 1, F.col("amount")).otherwise(0.0)), 2)
-         .alias("fraud_amount"),
-        F.round(F.avg(F.when(F.col("is_card_not_present"), 1.0).otherwise(0.0)), 4).alias("cnp_share"),
+        F.round(F.sum(F.when(F.col("is_fraud") == 1, F.col("amount")).otherwise(0.0)), 2).alias(
+            "fraud_amount"
+        ),
+        F.round(F.avg(F.when(F.col("is_card_not_present"), 1.0).otherwise(0.0)), 4).alias(
+            "cnp_share"
+        ),
         F.round(F.avg(F.when(F.col("is_night"), 1.0).otherwise(0.0)), 4).alias("night_share"),
         F.round(F.max("amount"), 2).alias("max_ticket"),
     )
 
     dim = merchants.select(
-        "merchant_id", "merchant_name", "category", "mcc", "mcc_group", "city", "state",
-        "region", "risk_tier", "risk_score", "mdr_rate", "is_new_merchant", "onboarding_date",
+        "merchant_id",
+        "merchant_name",
+        "category",
+        "mcc",
+        "mcc_group",
+        "city",
+        "state",
+        "region",
+        "risk_tier",
+        "risk_score",
+        "mdr_rate",
+        "is_new_merchant",
+        "onboarding_date",
     )
 
     enriched = (
         monthly.join(F.broadcast(dim), on="merchant_id", how="inner")
         # --- Taxas de risco ---------------------------------------------------
-        .withColumn("approval_rate",
-                    F.round(F.col("txn_approved") / F.greatest(F.col("txn_count"), F.lit(1)), 4))
-        .withColumn("chargeback_rate",
-                    F.round(F.col("chargeback_count") / F.greatest(F.col("txn_count"), F.lit(1)), 5))
-        .withColumn("fraud_rate",
-                    F.round(F.col("fraud_txn_count") / F.greatest(F.col("txn_count"), F.lit(1)), 5))
-        .withColumn("fraud_amount_rate",
-                    F.round(F.col("fraud_amount") / F.greatest(F.col("tpv"), F.lit(0.01)), 5))
+        .withColumn(
+            "approval_rate",
+            F.round(F.col("txn_approved") / F.greatest(F.col("txn_count"), F.lit(1)), 4),
+        )
+        .withColumn(
+            "chargeback_rate",
+            F.round(F.col("chargeback_count") / F.greatest(F.col("txn_count"), F.lit(1)), 5),
+        )
+        .withColumn(
+            "fraud_rate",
+            F.round(F.col("fraud_txn_count") / F.greatest(F.col("txn_count"), F.lit(1)), 5),
+        )
+        .withColumn(
+            "fraud_amount_rate",
+            F.round(F.col("fraud_amount") / F.greatest(F.col("tpv"), F.lit(0.01)), 5),
+        )
         # Concentracao: poucas contas gerando muito volume e sinal de laranja.
-        .withColumn("txn_per_customer",
-                    F.round(F.col("txn_count") / F.greatest(F.col("unique_customers"), F.lit(1)), 2))
-        .withColumn("revenue_per_customer",
-                    F.round(F.col("mdr_revenue") / F.greatest(F.col("unique_customers"), F.lit(1)), 2))
+        .withColumn(
+            "txn_per_customer",
+            F.round(F.col("txn_count") / F.greatest(F.col("unique_customers"), F.lit(1)), 2),
+        )
+        .withColumn(
+            "revenue_per_customer",
+            F.round(F.col("mdr_revenue") / F.greatest(F.col("unique_customers"), F.lit(1)), 2),
+        )
     )
 
     # --- Tendencia mes a mes: o lojista esta crescendo ou esvaziando? --------
     trend_window = Window.partitionBy("merchant_id").orderBy("event_month")
     with_trend = (
-        enriched
-        .withColumn("tpv_prev_month", F.lag("tpv").over(trend_window))
+        enriched.withColumn("tpv_prev_month", F.lag("tpv").over(trend_window))
         .withColumn(
             "tpv_growth",
-            F.round((F.col("tpv") - F.col("tpv_prev_month"))
-                    / F.greatest(F.col("tpv_prev_month"), F.lit(0.01)), 4),
+            F.round(
+                (F.col("tpv") - F.col("tpv_prev_month"))
+                / F.greatest(F.col("tpv_prev_month"), F.lit(0.01)),
+                4,
+            ),
         )
         # Media movel de 3 meses suaviza sazonalidade antes de acionar alerta.
-        .withColumn("tpv_ma3",
-                    F.round(F.avg("tpv").over(trend_window.rowsBetween(-2, 0)), 2))
+        .withColumn("tpv_ma3", F.round(F.avg("tpv").over(trend_window.rowsBetween(-2, 0)), 2))
     )
 
     return (
-        with_trend
-        .withColumn(
+        with_trend.withColumn(
             "merchant_health",
             F.when(F.col("chargeback_rate") >= CHARGEBACK_ALERT_THRESHOLD * 3, "descredenciar")
-             .when((F.col("chargeback_rate") >= CHARGEBACK_ALERT_THRESHOLD)
-                   | (F.col("fraud_rate") > 0.02), "monitoramento_bandeira")
-             .when((F.col("tpv") > 50_000) & (F.col("chargeback_rate") < 0.002), "estrategico")
-             .when(F.col("tpv_growth") < -0.5, "risco_de_evasao")
-             .otherwise("saudavel"),
+            .when(
+                (F.col("chargeback_rate") >= CHARGEBACK_ALERT_THRESHOLD)
+                | (F.col("fraud_rate") > 0.02),
+                "monitoramento_bandeira",
+            )
+            .when((F.col("tpv") > 50_000) & (F.col("chargeback_rate") < 0.002), "estrategico")
+            .when(F.col("tpv_growth") < -0.5, "risco_de_evasao")
+            .otherwise("saudavel"),
         )
-        .withColumn("is_under_monitoring",
-                    F.col("chargeback_rate") >= CHARGEBACK_ALERT_THRESHOLD)
+        .withColumn("is_under_monitoring", F.col("chargeback_rate") >= CHARGEBACK_ALERT_THRESHOLD)
         .withColumn("_gold_processed_at", F.current_timestamp())
     )
 
@@ -126,29 +154,47 @@ def run() -> int:
         gold = build(spark)
         path = cfg.table_path("gold", TABLE)
 
-        write_delta(gold, path, mode="overwrite", partition_by=["event_month"],
-                    overwrite_schema=True,
-                    comment="silver.transactions + silver.merchants -> gold.merchant_performance")
+        write_delta(
+            gold,
+            path,
+            mode="overwrite",
+            partition_by=["event_month"],
+            overwrite_schema=True,
+            comment="silver.transactions + silver.merchants -> gold.merchant_performance",
+        )
         register_table(spark, cfg.full_table_name("gold", TABLE), path)
 
         result = spark.read.format("delta").load(path)
         dq.run_quality_checks(
-            spark, result, dataset=f"gold.{TABLE}",
+            spark,
+            result,
+            dataset=f"gold.{TABLE}",
             expectations=[
                 dq.not_null("merchant_id"),
                 dq.not_null("event_month"),
                 dq.between("approval_rate", 0.0, 1.0),
                 dq.between("chargeback_rate", 0.0, 1.0),
-                dq.allowed_values("merchant_health",
-                                  ["saudavel", "estrategico", "risco_de_evasao",
-                                   "monitoramento_bandeira", "descredenciar"]),
+                dq.allowed_values(
+                    "merchant_health",
+                    [
+                        "saudavel",
+                        "estrategico",
+                        "risco_de_evasao",
+                        "monitoramento_bandeira",
+                        "descredenciar",
+                    ],
+                ),
                 dq.row_count_min(1),
             ],
         )
 
         alerts = result.where(F.col("is_under_monitoring")).select("merchant_id").distinct().count()
-        log.info("gold.%s: %s linhas | %s lojistas acima do limiar de chargeback",
-                 TABLE, result.count(), alerts)
+        log.info(
+            "gold.%s: %s linhas | %s lojistas acima do limiar de chargeback",
+            TABLE,
+            result.count(),
+            alerts,
+        )
         return result.count()
 
 

@@ -25,7 +25,6 @@ Execucao:
 from __future__ import annotations
 
 import argparse
-from typing import Dict, List, Optional
 
 from pyspark.sql import DataFrame, SparkSession
 from pyspark.sql import functions as F
@@ -34,8 +33,7 @@ from pyspark.sql.types import StructType
 from src.bronze.schemas import BRONZE_SCHEMAS
 from src.common import data_quality as dq
 from src.common.config import get_settings
-from src.common.delta_io import (register_table, table_exists, with_audit_columns,
-                                 write_delta)
+from src.common.delta_io import register_table, table_exists, with_audit_columns, write_delta
 from src.common.logging_utils import get_logger, log_stage
 from src.common.spark_session import get_spark
 
@@ -43,7 +41,7 @@ log = get_logger(__name__)
 
 # Configuracao declarativa das fontes batch: diretorio na raw, schema, tabela
 # Delta de destino e modo de escrita.
-BATCH_SOURCES: Dict[str, Dict[str, object]] = {
+BATCH_SOURCES: dict[str, dict[str, object]] = {
     "customers": {
         "raw_glob": "customers/*.csv",
         "source_system": "core_banking_crm",
@@ -128,7 +126,7 @@ def ingest_table(spark: SparkSession, table: str) -> int:
             bronze_df,
             bronze_path,
             mode=str(source["mode"]),
-            partition_by=source["partition_by"],   # type: ignore[arg-type]
+            partition_by=source["partition_by"],  # type: ignore[arg-type]
             merge_schema=True,
             replace_where=replace_where,
             comment=f"ingestao batch raw -> bronze.{table}",
@@ -141,8 +139,12 @@ def ingest_table(spark: SparkSession, table: str) -> int:
 
         # Bronze tem contrato minimo: a chave primaria precisa existir e o
         # volume nao pode desabar (sinal de arquivo truncado na origem).
-        pk = {"customers": "customer_id", "merchants": "merchant_id",
-              "transactions": "transaction_id", "credit_contracts": "contract_id"}[table]
+        pk = {
+            "customers": "customer_id",
+            "merchants": "merchant_id",
+            "transactions": "transaction_id",
+            "credit_contracts": "contract_id",
+        }[table]
         dq.run_quality_checks(
             spark,
             spark.read.format("delta").load(bronze_path),
@@ -158,7 +160,7 @@ def ingest_table(spark: SparkSession, table: str) -> int:
         return count
 
 
-def run(tables: Optional[List[str]] = None) -> Dict[str, int]:
+def run(tables: list[str] | None = None) -> dict[str, int]:
     """Executa a ingestao Bronze das tabelas informadas (ou de todas)."""
     spark = get_spark("bronze_ingestion")
     targets = tables or list(BATCH_SOURCES.keys())
@@ -167,8 +169,12 @@ def run(tables: Optional[List[str]] = None) -> Dict[str, int]:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Ingestao batch raw -> Bronze (Delta).")
-    parser.add_argument("--table", action="append", choices=list(BATCH_SOURCES.keys()),
-                        help="tabela especifica (pode repetir); padrao: todas")
+    parser.add_argument(
+        "--table",
+        action="append",
+        choices=list(BATCH_SOURCES.keys()),
+        help="tabela especifica (pode repetir); padrao: todas",
+    )
     args = parser.parse_args()
     run(args.table)
 

@@ -1,0 +1,45 @@
+# Hooks de pre-commit: o mesmo lint do CI, so que antes do push.
+#
+# Instalacao (uma vez por clone):
+#   pip install pre-commit && pre-commit install
+#
+# Rodar em tudo manualmente:
+#   pre-commit run --all-files
+#
+# A ideia nao e substituir o CI, e encurtar o ciclo: descobrir um import fora de
+# ordem em 200 ms no seu terminal, em vez de 3 minutos depois na aba do PR.
+
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.6.9
+    hooks:
+      - id: ruff
+        args: [--fix]
+      - id: ruff-format
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+        # Os workflows do GitHub Actions usam tags que o parser padrao rejeita.
+        args: [--allow-multiple-documents]
+      - id: check-json
+      - id: check-merge-conflict
+      - id: check-added-large-files
+        # Nenhum dado deveria entrar no Git; 500 KB e folgado para codigo e docs.
+        args: [--maxkb=500]
+      - id: detect-private-key
+      - id: no-commit-to-branch
+        args: [--branch, main]
+
+  # Impede que dado gerado seja commitado por acidente - o erro mais comum em
+  # repositorio de engenharia de dados.
+  - repo: local
+    hooks:
+      - id: bloquear-dados-gerados
+        name: bloquear commit de dados gerados
+        entry: bash -c 'git diff --cached --name-only | grep -E "^(data|data-ci|artifacts|reports)/" && echo "ERRO: dado gerado nao vai para o Git (veja .gitignore)" && exit 1 || exit 0'
+        language: system
+        pass_filenames: false

@@ -108,6 +108,7 @@ def make_callable(stage_name: str):
     auditoria das tabelas Delta apontem diretamente para a execucao do DAG.
     Rastrear "qual DAG run gravou esta linha" vira uma query.
     """
+
     def _run(**context):
         os.environ["PIPELINE_RUN_ID"] = str(context["run_id"])[:32]
         return STAGES_BY_NAME[stage_name].runner()
@@ -119,14 +120,13 @@ with DAG(
     dag_id="lakehouse_medallion_neopag",
     description="Pipeline Medallion (Bronze/Silver/Gold) + Feature Store + IA sobre Delta Lake",
     default_args=DEFAULT_ARGS,
-    schedule="0 5 * * *",              # diariamente as 05:00
+    schedule="0 5 * * *",  # diariamente as 05:00
     start_date=datetime(2024, 1, 1),
-    catchup=False,                     # nao reprocessa o historico ao ligar o DAG
-    max_active_runs=1,                 # evita duas execucoes escrevendo na mesma tabela
+    catchup=False,  # nao reprocessa o historico ao ligar o DAG
+    max_active_runs=1,  # evita duas execucoes escrevendo na mesma tabela
     tags=["lakehouse", "delta", "medallion", "fintech", "ml", "genai"],
     doc_md=__doc__,
 ) as dag:
-
     inicio = EmptyOperator(task_id="inicio")
     fim = EmptyOperator(task_id="fim", trigger_rule="all_done")
 
@@ -145,7 +145,7 @@ with DAG(
             python_callable=make_callable(stage.name),
             task_group=groups.get(group_name) if group_name else None,
             doc_md=f"**{stage.description}**\n\n"
-                   f"Depende de: {', '.join(stage.depends_on) or 'nenhuma etapa'}.",
+            f"Depende de: {', '.join(stage.depends_on) or 'nenhuma etapa'}.",
             # Etapas nao criticas nao derrubam o DAG inteiro.
             retries=stage.retries + (0 if stage.critical else 1),
             dag=dag,

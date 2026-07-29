@@ -1,0 +1,135 @@
+{
+  "table": "gold.credit_risk_portfolio",
+  "frozen_at": "2026-07-29T12:22:14+00:00",
+  "note": "contrato criado automaticamente",
+  "columns": {
+    "vintage": {
+      "type": "string",
+      "nullable": true
+    },
+    "product": {
+      "type": "string",
+      "nullable": true
+    },
+    "customer_risk_band": {
+      "type": "string",
+      "nullable": true
+    },
+    "contracts": {
+      "type": "bigint",
+      "nullable": true
+    },
+    "customers": {
+      "type": "bigint",
+      "nullable": true
+    },
+    "principal_originated": {
+      "type": "double",
+      "nullable": true
+    },
+    "ead": {
+      "type": "double",
+      "nullable": true
+    },
+    "avg_ticket": {
+      "type": "double",
+      "nullable": true
+    },
+    "avg_term_months": {
+      "type": "double",
+      "nullable": true
+    },
+    "avg_monthly_rate": {
+      "type": "double",
+      "nullable": true
+    },
+    "avg_debt_to_income": {
+      "type": "double",
+      "nullable": true
+    },
+    "avg_months_on_book": {
+      "type": "double",
+      "nullable": true
+    },
+    "npl_contracts": {
+      "type": "bigint",
+      "nullable": true
+    },
+    "npl_balance": {
+      "type": "double",
+      "nullable": true
+    },
+    "provision_amount": {
+      "type": "double",
+      "nullable": true
+    },
+    "avg_days_past_due": {
+      "type": "double",
+      "nullable": true
+    },
+    "written_off_contracts": {
+      "type": "bigint",
+      "nullable": true
+    },
+    "written_off_balance": {
+      "type": "double",
+      "nullable": true
+    },
+    "recovery_amount": {
+      "type": "double",
+      "nullable": true
+    },
+    "share_current": {
+      "type": "double",
+      "nullable": true
+    },
+    "share_early_delinquency": {
+      "type": "double",
+      "nullable": true
+    },
+    "share_late_delinquency": {
+      "type": "double",
+      "nullable": true
+    },
+    "pd_observed": {
+      "type": "double",
+      "nullable": true
+    },
+    "lgd_assumption": {
+      "type": "double",
+      "nullable": true
+    },
+    "lgd_observed": {
+      "type": "double",
+      "nullable": true
+    },
+    "expected_loss": {
+      "type": "double",
+      "nullable": true
+    },
+    "expected_loss_rate": {
+      "type": "double",
+      "nullable": true
+    },
+    "npl_ratio": {
+      "type": "double",
+      "nullable": true
+    },
+    "coverage_ratio": {
+      "type": "double",
+      "nullable": true
+    },
+    "net_recovery_rate": {
+      "type": "double",
+      "nullable": true
+    },
+    "portfolio_alert": {
+      "type": "string",
+      "nullable": true
+    },
+    "reference_date": {
+      "type": "date",
+      "nullable": true
+    }
+  }
+}

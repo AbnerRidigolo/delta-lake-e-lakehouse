@@ -39,7 +39,7 @@ VALID_STATUS = ["active", "settled", "default", "written_off"]
 VALID_PRODUCTS = ["cartao_rotativo", "emprestimo_pessoal", "consignado", "bnpl", "capital_giro_pj"]
 
 
-def _delinquency_bucket() -> "F.Column":
+def _delinquency_bucket() -> F.Column:
     """Classifica o contrato na faixa de atraso padrao do mercado."""
     dpd = F.col("days_past_due")
     return (
@@ -53,7 +53,7 @@ def _delinquency_bucket() -> "F.Column":
     )
 
 
-def _provision_rate(rates: dict) -> "F.Column":
+def _provision_rate(rates: dict) -> F.Column:
     """Mapeia faixa de atraso -> percentual de provisao (parametrizado no YAML)."""
     column = F.lit(None).cast("double")
     for bucket, rate in rates.items():
@@ -61,14 +61,16 @@ def _provision_rate(rates: dict) -> "F.Column":
     return F.coalesce(column, F.lit(1.0))
 
 
-def transform(spark: SparkSession, bronze: DataFrame, customers: DataFrame
-              ) -> tuple[DataFrame, DataFrame]:
+def transform(
+    spark: SparkSession, bronze: DataFrame, customers: DataFrame
+) -> tuple[DataFrame, DataFrame]:
     cfg = get_settings()
     rules = cfg.business_rules
     reference_date = F.lit(cfg.data_generation["end_date"]).cast("date")
 
     deduped = T.deduplicate(
-        bronze, keys=["contract_id"],
+        bronze,
+        keys=["contract_id"],
         order_by=[F.col("source_extracted_at").desc_nulls_last(), F.col("_ingested_at").desc()],
     )
 
@@ -102,8 +104,10 @@ def transform(spark: SparkSession, bronze: DataFrame, customers: DataFrame
     )
     reject_reason = (
         F.when(F.col("contract_id").isNull(), "contract_id ausente")
-        .when(F.col("principal_amount").isNull() | (F.col("principal_amount") <= 0),
-              "principal invalido")
+        .when(
+            F.col("principal_amount").isNull() | (F.col("principal_amount") <= 0),
+            "principal invalido",
+        )
         .when(F.col("origination_date").isNull(), "data de originacao invalida")
         .when(F.col("term_months").isNull() | (F.col("term_months") <= 0), "prazo invalido")
         .when(~F.col("status").isin(VALID_STATUS), "status fora do dominio")
@@ -114,7 +118,8 @@ def transform(spark: SparkSession, bronze: DataFrame, customers: DataFrame
 
     # Integridade referencial com o cadastro de clientes.
     customer_dim = customers.select(
-        "customer_id", "customer_key",
+        "customer_id",
+        "customer_key",
         F.col("segment").alias("customer_segment"),
         F.col("risk_band").alias("customer_risk_band"),
         F.col("monthly_income").alias("customer_income"),
@@ -122,43 +127,60 @@ def transform(spark: SparkSession, bronze: DataFrame, customers: DataFrame
     )
     joined = valid.join(F.broadcast(customer_dim), on="customer_id", how="left")
     referenced, rejected_orphan = T.split_valid_invalid(
-        joined, F.col("customer_key").isNotNull(), F.lit("cliente inexistente no cadastro"))
+        joined, F.col("customer_key").isNotNull(), F.lit("cliente inexistente no cadastro")
+    )
 
-    reject_cols = ["contract_id", "customer_id", "product", "principal_amount",
-                   "status", "_reject_reason"]
+    reject_cols = [
+        "contract_id",
+        "customer_id",
+        "product",
+        "principal_amount",
+        "status",
+        "_reject_reason",
+    ]
     rejected = rejected_technical.select(*reject_cols).unionByName(
-        rejected_orphan.select(*reject_cols))
+        rejected_orphan.select(*reject_cols)
+    )
 
     default_dpd = int(rules["default_days_past_due"])
 
     silver = (
-        referenced
-        .withColumn("delinquency_bucket", _delinquency_bucket())
+        referenced.withColumn("delinquency_bucket", _delinquency_bucket())
         .withColumn("provision_rate", _provision_rate(rules["provision_rates"]))
         # Provisao = saldo exposto x percentual da faixa (proxy de perda esperada).
-        .withColumn("provision_amount",
-                    F.round(F.col("outstanding_balance") * F.col("provision_rate"), 2))
+        .withColumn(
+            "provision_amount", F.round(F.col("outstanding_balance") * F.col("provision_rate"), 2)
+        )
         .withColumn("is_npl", F.col("days_past_due") >= default_dpd)
         .withColumn("is_written_off", F.col("status") == "written_off")
         .withColumn("vintage", F.date_format(F.col("origination_date"), "yyyy-MM"))
-        .withColumn("months_on_book",
-                    F.floor(F.months_between(reference_date, F.col("origination_date"))))
+        .withColumn(
+            "months_on_book", F.floor(F.months_between(reference_date, F.col("origination_date")))
+        )
         # Parcela pela Tabela Price: PMT = PV * i / (1 - (1+i)^-n)
         .withColumn(
             "monthly_installment",
             F.when(
                 F.col("interest_rate_month") > 0,
                 F.round(
-                    F.col("principal_amount") * F.col("interest_rate_month")
-                    / (1 - F.pow(1 + F.col("interest_rate_month"), -F.col("term_months"))), 2),
+                    F.col("principal_amount")
+                    * F.col("interest_rate_month")
+                    / (1 - F.pow(1 + F.col("interest_rate_month"), -F.col("term_months"))),
+                    2,
+                ),
             ).otherwise(F.round(F.col("principal_amount") / F.col("term_months"), 2)),
         )
         # Comprometimento de renda: principal driver de inadimplencia.
-        .withColumn("debt_to_income",
-                    F.round(F.col("monthly_installment")
-                            / F.greatest(F.col("customer_income"), F.lit(1.0)), 4))
-        .withColumn("progress_ratio",
-                    F.round(F.col("installments_paid") / F.greatest(F.col("term_months"), F.lit(1)), 4))
+        .withColumn(
+            "debt_to_income",
+            F.round(
+                F.col("monthly_installment") / F.greatest(F.col("customer_income"), F.lit(1.0)), 4
+            ),
+        )
+        .withColumn(
+            "progress_ratio",
+            F.round(F.col("installments_paid") / F.greatest(F.col("term_months"), F.lit(1)), 4),
+        )
         # EAD (exposure at default) simplificado: saldo em aberto.
         .withColumn("exposure_at_default", F.col("outstanding_balance"))
         .withColumn("_silver_processed_at", F.current_timestamp())
@@ -178,15 +200,22 @@ def run() -> int:
         silver, rejected = transform(spark, bronze, customers)
 
         silver_path = cfg.table_path("silver", TABLE)
-        write_delta(silver, silver_path, mode="overwrite", partition_by=["vintage"],
-                    overwrite_schema=True,
-                    comment="bronze.credit_contracts -> silver.credit_contracts")
+        write_delta(
+            silver,
+            silver_path,
+            mode="overwrite",
+            partition_by=["vintage"],
+            overwrite_schema=True,
+            comment="bronze.credit_contracts -> silver.credit_contracts",
+        )
         register_table(spark, cfg.full_table_name("silver", TABLE), silver_path)
         quarantine(rejected, TABLE)
 
         result = spark.read.format("delta").load(silver_path)
         dq.run_quality_checks(
-            spark, result, dataset=f"silver.{TABLE}",
+            spark,
+            result,
+            dataset=f"silver.{TABLE}",
             expectations=[
                 dq.not_null("contract_id"),
                 dq.unique("contract_id"),

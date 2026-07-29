@@ -82,6 +82,76 @@ execucao (eles aparecem no fim de `make pipeline`).
 
 ---
 
+## 1b. Post alternativo — foco em qualidade de dados e CI/CD
+
+> **Coloquei o pipeline de dados inteiro dentro do CI. Na primeira execucao, o
+> proprio monitoramento reprovou uma feature que EU tinha criado.**
+>
+> Contexto: construi um Data Lakehouse com Delta Lake para uma fintech ficticia —
+> Medallion, feature store, modelo de fraude, RAG. Depois resolvi levar a serio a
+> parte que quase todo projeto trata como checklist: **qualidade de dados**.
+>
+> A maioria dos pipelines tem `not_null` e `unique` em algumas colunas e chama
+> isso de data quality. O problema e o que essas regras NAO pegam:
+>
+> ❌ perder 12% das linhas num join — as que restaram estao todas validas
+> ❌ coluna removida na origem — o `mergeSchema` absorve e ela vira NULL em silencio
+> ❌ centavos lidos como reais — cada valor continua dentro da faixa
+> ❌ a populacao mudou — nenhuma linha esta errada
+>
+> Entao implementei **6 camadas**, 114 checagens por execucao:
+>
+> 🔒 **CHECK constraints do Delta** — a unica camada que IMPEDE o dado ruim de
+> existir. Vive no protocolo da tabela, entao protege ate contra o notebook do
+> analista e o backfill manual, que nao passam pelo pipeline.
+>
+> 🧮 **Conciliacao entre camadas** — duas identidades que precisam fechar:
+> `bronze == silver + quarentena` e `soma de valor na Silver == soma na Gold`.
+> Contagem batendo nao garante valor batendo: um `explode` acidental duplica
+> dinheiro sem mudar a contagem de chaves.
+>
+> 📜 **Contratos de schema** — o schema fica congelado em JSON no Git. Mudanca e
+> classificada em BREAKING (falha) ou ADDITIVE (passa, registrado). Aceitar exige
+> um comando que gera diff e passa por code review. Ninguem muda o contrato de
+> uma tabela sem aparecer no PR.
+>
+> 📉 **PSI (Population Stability Index)** — o padrao de risco de credito para
+> medir se a populacao mudou.
+>
+> **E aqui veio a parte boa.** O PSI marcou 0,93 numa feature minha:
+> `customer_txn_seq`, o numero da transacao no historico do cliente. Diagnostico:
+> contador monotonico. Num split temporal, o periodo recente SEMPRE tem valores
+> maiores — e em producao a feature assumiria valores que nunca existiram no
+> treino. O modelo extrapolaria para fora do dominio aprendido.
+>
+> Tentei limitar o valor. Nao resolveu: a tendencia continuava. A correcao certa
+> era **trocar a feature**, nao silenciar o alarme. Virou
+> `is_first_transaction` — mantem o sinal util ("primeira compra?" e um marcador
+> legitimo de fraude) sem a tendencia.
+>
+> ⚙️ E o **CI roda o pipeline inteiro** — as 23 etapas, as 114 checagens — a cada
+> Pull Request. Nao um subconjunto: o mesmo caminho de producao, com 2% do
+> volume, em 4 minutos. Um CI que exercita um caminho diferente do de producao
+> nao testa producao.
+>
+> O scorecard (0-100) aparece direto na aba do PR. Abaixo do minimo, o build
+> falha. Um workflow diario roda de novo e **abre issue** quando reprova — porque
+> falha de monitoramento agendado que so vai para o log nao e vista por ninguem.
+>
+> A licao que fica: ferramenta de qualidade so vale se voce aceitar o que ela te
+> diz — inclusive quando ela reprova o SEU codigo.
+>
+> 🛠 PySpark 3.5 · Delta Lake 3.2 · GitHub Actions · ruff · scikit-learn
+>
+> 👉 [LINK DO REPOSITORIO]
+>
+> Qual foi o defeito mais caro que passou pelo seu data quality? 👇
+>
+> #DataEngineering #DataQuality #DeltaLake #CICD #MLOps #GitHubActions
+> #ApacheSpark #PySpark #Lakehouse #DadosBrasil
+
+---
+
 ## 2. Versao curta (para quem prefere post enxuto)
 
 > Construi um **Data Lakehouse completo com Delta Lake** — do dado sintetico ao RAG.

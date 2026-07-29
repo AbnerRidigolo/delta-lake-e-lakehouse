@@ -1,0 +1,147 @@
+{
+  "table": "feature_store.transaction_features",
+  "frozen_at": "2026-07-29T12:22:14+00:00",
+  "note": "contrato criado automaticamente",
+  "columns": {
+    "transaction_id": {
+      "type": "string",
+      "nullable": true
+    },
+    "customer_id": {
+      "type": "string",
+      "nullable": true
+    },
+    "merchant_id": {
+      "type": "string",
+      "nullable": true
+    },
+    "event_ts": {
+      "type": "timestamp",
+      "nullable": true
+    },
+    "event_date": {
+      "type": "date",
+      "nullable": true
+    },
+    "feature_month": {
+      "type": "string",
+      "nullable": true
+    },
+    "tf_amount": {
+      "type": "double",
+      "nullable": true
+    },
+    "tf_installments": {
+      "type": "int",
+      "nullable": true
+    },
+    "tf_event_hour": {
+      "type": "int",
+      "nullable": true
+    },
+    "tf_txn_count_10min": {
+      "type": "bigint",
+      "nullable": true
+    },
+    "tf_txn_count_24h": {
+      "type": "bigint",
+      "nullable": true
+    },
+    "tf_amount_sum_24h": {
+      "type": "double",
+      "nullable": true
+    },
+    "tf_distinct_devices_24h": {
+      "type": "int",
+      "nullable": true
+    },
+    "tf_distinct_states_24h": {
+      "type": "int",
+      "nullable": true
+    },
+    "tf_seconds_since_prev": {
+      "type": "bigint",
+      "nullable": true
+    },
+    "tf_amount_zscore": {
+      "type": "double",
+      "nullable": true
+    },
+    "tf_amount_vs_merchant_avg": {
+      "type": "double",
+      "nullable": true
+    },
+    "tf_amount_to_income": {
+      "type": "double",
+      "nullable": true
+    },
+    "tf_is_first_transaction": {
+      "type": "int",
+      "nullable": true
+    },
+    "tf_merchant_risk_score": {
+      "type": "double",
+      "nullable": true
+    },
+    "tf_mcc_intrinsic_risk": {
+      "type": "double",
+      "nullable": true
+    },
+    "tf_is_new_device": {
+      "type": "int",
+      "nullable": true
+    },
+    "tf_is_cnp": {
+      "type": "int",
+      "nullable": true
+    },
+    "tf_is_out_of_state": {
+      "type": "int",
+      "nullable": true
+    },
+    "tf_is_night": {
+      "type": "int",
+      "nullable": true
+    },
+    "tf_is_weekend": {
+      "type": "int",
+      "nullable": true
+    },
+    "tf_channel": {
+      "type": "string",
+      "nullable": true
+    },
+    "tf_payment_method": {
+      "type": "string",
+      "nullable": true
+    },
+    "tf_merchant_category": {
+      "type": "string",
+      "nullable": true
+    },
+    "tf_merchant_mcc_group": {
+      "type": "string",
+      "nullable": true
+    },
+    "tf_merchant_risk_tier": {
+      "type": "string",
+      "nullable": true
+    },
+    "fraud_score_rule": {
+      "type": "int",
+      "nullable": true
+    },
+    "triggered_rules_count": {
+      "type": "int",
+      "nullable": true
+    },
+    "is_fraud": {
+      "type": "int",
+      "nullable": true
+    },
+    "fraud_type": {
+      "type": "string",
+      "nullable": true
+    }
+  }
+}

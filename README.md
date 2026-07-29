@@ -697,7 +697,7 @@ segunda copia para divergir.
 | Job | O que faz | Duracao |
 |---|---|---|
 | `lint` | `ruff check` + `ruff format --check` + `compileall` | ~20 s |
-| `testes-rapidos` | Testes sem Spark (config, DAG, catalogo, pesos das regras) | ~15 s |
+| `testes-unitarios` | 12 testes sem subir o Spark (config, DAG, catalogo, logica de qualidade) | ~1 min |
 | `pipeline` | Pipeline completo + testes de integracao + portao de qualidade | ~4 min |
 
 Detalhes que importam:

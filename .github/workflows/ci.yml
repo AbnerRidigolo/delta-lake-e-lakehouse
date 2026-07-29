@@ -140,7 +140,7 @@ jobs:
       # tambem como artefato, junto do relatorio analitico.
       - name: Publicar relatorios como artefato
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: relatorios-qualidade-${{ github.run_id }}
           path: |

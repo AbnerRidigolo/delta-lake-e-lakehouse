@@ -55,7 +55,7 @@ jobs:
           pip install -r requirements.txt
 
       - name: Cache dos JARs do Delta Lake
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: .ivy2
           key: ivy-${{ runner.os }}-delta3.2.1-spark3.5.3
@@ -65,7 +65,7 @@ jobs:
       # `quality.dq_results`. Restaurar o cache entre execucoes e o que permite
       # comparar o volume de hoje com a mediana dos dias anteriores.
       - name: Restaurar historico de qualidade
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: data-ci/quality
           key: historico-qualidade-${{ github.run_id }}

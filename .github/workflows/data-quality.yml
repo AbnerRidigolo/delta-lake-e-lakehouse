@@ -93,7 +93,7 @@ jobs:
       # historico de workflow. Uma issue chega em quem precisa agir.
       - name: Abrir issue quando a qualidade reprovar
         if: failure()
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         with:
           script: |
             const titulo = `Qualidade de dados reprovada em ${new Date().toISOString().slice(0, 10)}`;

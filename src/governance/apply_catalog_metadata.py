@@ -26,7 +26,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any
 
 import yaml
 
@@ -46,18 +46,18 @@ ACCESS_PROFILES = {
 }
 
 
-def load_catalog() -> Dict[str, Any]:
+def load_catalog() -> dict[str, Any]:
     """Le o catalogo declarativo do repositorio."""
     root = get_settings().project_root
-    with open(root / "config" / "catalog.yaml", "r", encoding="utf-8") as handle:
+    with open(root / "config" / "catalog.yaml", encoding="utf-8") as handle:
         return yaml.safe_load(handle)
 
 
-def apply_table_properties(spark, catalog: Dict[str, Any]) -> List[Dict[str, Any]]:
+def apply_table_properties(spark, catalog: dict[str, Any]) -> list[dict[str, Any]]:
     """Grava os metadados como TBLPROPERTIES nas tabelas Delta existentes."""
     cfg = get_settings()
     domains = catalog.get("domains", {})
-    applied: List[Dict[str, Any]] = []
+    applied: list[dict[str, Any]] = []
 
     for entry in catalog["tables"]:
         layer, table = entry["name"].split(".", 1)
@@ -85,19 +85,40 @@ def apply_table_properties(spark, catalog: Dict[str, Any]) -> List[Dict[str, Any
         ).replace("\\", "")
         spark.sql(f"ALTER TABLE delta.`{path}` SET TBLPROPERTIES ({assignments})")
 
-        applied.append({**entry, **{"path": path, "owner": properties["governanca.owner"],
-                                    "steward": properties["governanca.steward"],
-                                    "acesso": properties["governanca.acesso"]}})
-        log.info("Metadados aplicados: %s (%s / %s)", entry["name"], entry["domain"],
-                 entry["classification"])
+        # O caminho vai para o catalogo RELATIVO a raiz do projeto. O caminho
+        # absoluto da maquina que rodou o pipeline (`/home/runner/...`,
+        # `C:\Users\...`) nao significa nada para quem le o repositorio e ainda
+        # gera diff a cada execucao em ambiente diferente.
+        try:
+            relative_path = str(Path(path).relative_to(cfg.project_root))
+        except ValueError:
+            relative_path = path  # storage externo (S3, ADLS): mantem como esta
+
+        applied.append(
+            {
+                **entry,
+                **{
+                    "path": relative_path,
+                    "owner": properties["governanca.owner"],
+                    "steward": properties["governanca.steward"],
+                    "acesso": properties["governanca.acesso"],
+                },
+            }
+        )
+        log.info(
+            "Metadados aplicados: %s (%s / %s)",
+            entry["name"],
+            entry["domain"],
+            entry["classification"],
+        )
 
     return applied
 
 
-def render_catalog_markdown(catalog: Dict[str, Any], applied: List[Dict[str, Any]]) -> str:
+def render_catalog_markdown(catalog: dict[str, Any], applied: list[dict[str, Any]]) -> str:
     """Gera a pagina de documentacao do catalogo de dados."""
     cfg = get_settings()
-    lines: List[str] = [
+    lines: list[str] = [
         "# Catalogo de dados - Lakehouse NeoPag",
         "",
         "*Documento gerado automaticamente por "
@@ -112,8 +133,13 @@ def render_catalog_markdown(catalog: Dict[str, Any], applied: List[Dict[str, Any
     for name, description in catalog["classifications"].items():
         lines.append(f"| `{name}` | {description} | {', '.join(ACCESS_PROFILES.get(name, []))} |")
 
-    lines += ["", "## Dominios e responsaveis", "",
-              "| Dominio | Owner (produto de dados) | Steward (governanca) |", "|---|---|---|"]
+    lines += [
+        "",
+        "## Dominios e responsaveis",
+        "",
+        "| Dominio | Owner (produto de dados) | Steward (governanca) |",
+        "|---|---|---|",
+    ]
     for domain, meta in catalog["domains"].items():
         lines.append(f"| `{domain}` | {meta['owner']} | {meta['steward']} |")
 
@@ -121,9 +147,13 @@ def render_catalog_markdown(catalog: Dict[str, Any], applied: List[Dict[str, Any
         tables = [t for t in catalog["tables"] if t["layer"] == layer]
         if not tables:
             continue
-        lines += ["", f"## Camada {layer.upper()}", "",
-                  "| Tabela | Nome no Unity Catalog | Dominio | Classificacao | SLA | Descricao |",
-                  "|---|---|---|---|---|---|"]
+        lines += [
+            "",
+            f"## Camada {layer.upper()}",
+            "",
+            "| Tabela | Nome no Unity Catalog | Dominio | Classificacao | SLA | Descricao |",
+            "|---|---|---|---|---|---|",
+        ]
         for entry in tables:
             _, table_name = entry["name"].split(".", 1)
             uc_name = cfg.uc_table_name(entry["layer"], table_name)
@@ -134,19 +164,28 @@ def render_catalog_markdown(catalog: Dict[str, Any], applied: List[Dict[str, Any
             )
 
     pii_tables = [t for t in catalog["tables"] if t.get("pii_columns")]
-    lines += ["", "## Dados pessoais (LGPD)", "",
-              "Colunas classificadas como dado pessoal e o tratamento aplicado:", "",
-              "| Tabela | Colunas | Tratamento |", "|---|---|---|"]
+    lines += [
+        "",
+        "## Dados pessoais (LGPD)",
+        "",
+        "Colunas classificadas como dado pessoal e o tratamento aplicado:",
+        "",
+        "| Tabela | Colunas | Tratamento |",
+        "|---|---|---|",
+    ]
     for entry in pii_tables:
-        treatment = ("mascaramento + hash com salt" if entry["layer"] != "bronze"
-                     else "acesso restrito (dado bruto preservado para auditoria)")
+        treatment = (
+            "mascaramento + hash com salt"
+            if entry["layer"] != "bronze"
+            else "acesso restrito (dado bruto preservado para auditoria)"
+        )
         lines.append(f"| `{entry['name']}` | {', '.join(entry['pii_columns'])} | {treatment} |")
 
     lines += ["", f"*Tabelas materializadas e anotadas nesta execucao: {len(applied)}.*", ""]
     return "\n".join(lines)
 
 
-def render_unity_catalog_sql(catalog: Dict[str, Any]) -> str:
+def render_unity_catalog_sql(catalog: dict[str, Any]) -> str:
     """Gera o equivalente do catalogo para Databricks Unity Catalog.
 
     Mostra como a mesma definicao declarativa se traduz em objetos gerenciados:
@@ -185,7 +224,8 @@ def render_unity_catalog_sql(catalog: Dict[str, Any]) -> str:
         for column in entry.get("pii_columns", []) or []:
             lines.append(
                 f"ALTER TABLE {full} ALTER COLUMN {column} "
-                f"SET TAGS ('pii' = 'true', 'lgpd' = 'dado_pessoal');")
+                f"SET TAGS ('pii' = 'true', 'lgpd' = 'dado_pessoal');"
+            )
         lines.append("")
 
     lines += [
@@ -193,14 +233,13 @@ def render_unity_catalog_sql(catalog: Dict[str, Any]) -> str:
         "CREATE OR REPLACE FUNCTION mask_pii(valor STRING)",
         "  RETURN CASE WHEN is_account_group_member('dpo') THEN valor ELSE '***' END;",
         "",
-        f"ALTER TABLE {catalog_name}.silver.customers "
-        "ALTER COLUMN full_name SET MASK mask_pii;",
+        f"ALTER TABLE {catalog_name}.silver.customers " "ALTER COLUMN full_name SET MASK mask_pii;",
         "",
     ]
     return "\n".join(lines)
 
 
-def run() -> Dict[str, Any]:
+def run() -> dict[str, Any]:
     cfg = get_settings()
     spark = get_spark("governance_catalog")
 
@@ -212,15 +251,17 @@ def run() -> Dict[str, Any]:
         output_dir.mkdir(parents=True, exist_ok=True)
 
         (output_dir / "data_catalog.md").write_text(
-            render_catalog_markdown(catalog, applied), encoding="utf-8")
+            render_catalog_markdown(catalog, applied), encoding="utf-8"
+        )
         (output_dir / "unity_catalog_setup.sql").write_text(
-            render_unity_catalog_sql(catalog), encoding="utf-8")
+            render_unity_catalog_sql(catalog), encoding="utf-8"
+        )
         (output_dir / "catalog_applied.json").write_text(
-            json.dumps(applied, indent=2, ensure_ascii=False), encoding="utf-8")
+            json.dumps(applied, indent=2, ensure_ascii=False), encoding="utf-8"
+        )
 
         log.info("Catalogo documentado em %s", output_dir)
-        return {"tabelas_anotadas": len(applied),
-                "tabelas_declaradas": len(catalog["tables"])}
+        return {"tabelas_anotadas": len(applied), "tabelas_declaradas": len(catalog["tables"])}
 
 
 if __name__ == "__main__":

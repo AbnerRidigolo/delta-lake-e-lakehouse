@@ -1,0 +1,87 @@
+{
+  "table": "silver.merchants",
+  "frozen_at": "2026-07-29T12:22:14+00:00",
+  "note": "contrato criado automaticamente",
+  "columns": {
+    "mcc": {
+      "type": "string",
+      "nullable": true
+    },
+    "merchant_id": {
+      "type": "string",
+      "nullable": true
+    },
+    "merchant_name": {
+      "type": "string",
+      "nullable": true
+    },
+    "legal_name": {
+      "type": "string",
+      "nullable": true
+    },
+    "category": {
+      "type": "string",
+      "nullable": true
+    },
+    "city": {
+      "type": "string",
+      "nullable": true
+    },
+    "state": {
+      "type": "string",
+      "nullable": true
+    },
+    "region": {
+      "type": "string",
+      "nullable": true
+    },
+    "onboarding_date": {
+      "type": "date",
+      "nullable": true
+    },
+    "avg_ticket": {
+      "type": "double",
+      "nullable": true
+    },
+    "risk_score": {
+      "type": "double",
+      "nullable": true
+    },
+    "risk_flag": {
+      "type": "string",
+      "nullable": true
+    },
+    "mdr_rate": {
+      "type": "double",
+      "nullable": true
+    },
+    "is_active": {
+      "type": "boolean",
+      "nullable": true
+    },
+    "mcc_expected_ticket": {
+      "type": "double",
+      "nullable": true
+    },
+    "mcc_group": {
+      "type": "string",
+      "nullable": true
+    },
+    "mcc_intrinsic_risk": {
+      "type": "double",
+      "nullable": true
+    },
+    "merchant_age_days": {
+      "type": "int",
+      "nullable": true
+    },
+    "is_new_merchant": {
+      "type": "boolean",
+      "nullable": true
+    },
+    "risk_tier": {
+      "type": "string",
+      "nullable": true
+    }
+  }
+}

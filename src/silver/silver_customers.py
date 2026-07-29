@@ -94,27 +94,36 @@ def transform(spark: SparkSession, bronze: DataFrame) -> tuple[DataFrame, DataFr
 
     # --- 4) Derivacoes de negocio --------------------------------------------
     silver = (
-        valid
-        .withColumn("age", F.floor(F.months_between(reference_date, F.col("birth_date")) / 12))
-        .withColumn("age_band", F.when(F.col("age") < 25, "18-24")
-                    .when(F.col("age") < 35, "25-34")
-                    .when(F.col("age") < 45, "35-44")
-                    .when(F.col("age") < 60, "45-59")
-                    .otherwise("60+"))
+        valid.withColumn("age", F.floor(F.months_between(reference_date, F.col("birth_date")) / 12))
+        .withColumn(
+            "age_band",
+            F.when(F.col("age") < 25, "18-24")
+            .when(F.col("age") < 35, "25-34")
+            .when(F.col("age") < 45, "35-44")
+            .when(F.col("age") < 60, "45-59")
+            .otherwise("60+"),
+        )
         .withColumn("tenure_days", F.datediff(reference_date, F.col("signup_date")))
-        .withColumn("tenure_band", F.when(F.col("tenure_days") < 90, "0-3m")
-                    .when(F.col("tenure_days") < 365, "3-12m")
-                    .when(F.col("tenure_days") < 730, "1-2a")
-                    .otherwise("2a+"))
+        .withColumn(
+            "tenure_band",
+            F.when(F.col("tenure_days") < 90, "0-3m")
+            .when(F.col("tenure_days") < 365, "3-12m")
+            .when(F.col("tenure_days") < 730, "1-2a")
+            .otherwise("2a+"),
+        )
         # Safra de aquisicao: essencial para analise de cohort e de churn.
         .withColumn("signup_cohort", F.date_format(F.col("signup_date"), "yyyy-MM"))
         # Quantas vezes o limite cabe na renda: proxy simples de alavancagem.
-        .withColumn("limit_to_income_ratio",
-                    F.round(F.col("credit_limit") / F.col("monthly_income"), 4))
-        .withColumn("income_band", F.when(F.col("monthly_income") < 3000, "ate_3k")
-                    .when(F.col("monthly_income") < 8000, "3k_8k")
-                    .when(F.col("monthly_income") < 20000, "8k_20k")
-                    .otherwise("20k+"))
+        .withColumn(
+            "limit_to_income_ratio", F.round(F.col("credit_limit") / F.col("monthly_income"), 4)
+        )
+        .withColumn(
+            "income_band",
+            F.when(F.col("monthly_income") < 3000, "ate_3k")
+            .when(F.col("monthly_income") < 8000, "3k_8k")
+            .when(F.col("monthly_income") < 20000, "8k_20k")
+            .otherwise("20k+"),
+        )
         .withColumn("_silver_processed_at", F.current_timestamp())
     )
 
@@ -130,14 +139,21 @@ def run() -> int:
         silver, rejected = transform(spark, bronze)
 
         silver_path = cfg.table_path("silver", TABLE)
-        write_delta(silver, silver_path, mode="overwrite", overwrite_schema=True,
-                    comment="bronze.customers -> silver.customers")
+        write_delta(
+            silver,
+            silver_path,
+            mode="overwrite",
+            overwrite_schema=True,
+            comment="bronze.customers -> silver.customers",
+        )
         register_table(spark, cfg.full_table_name("silver", TABLE), silver_path)
         quarantine(rejected, TABLE)
 
         result = spark.read.format("delta").load(silver_path)
         dq.run_quality_checks(
-            spark, result, dataset=f"silver.{TABLE}",
+            spark,
+            result,
+            dataset=f"silver.{TABLE}",
             expectations=[
                 dq.not_null("customer_id"),
                 dq.unique("customer_id"),
@@ -146,8 +162,9 @@ def run() -> int:
                 dq.allowed_values("status", VALID_STATUS),
                 dq.allowed_values("risk_band", ["A", "B", "C", "D", "E"]),
                 dq.between("age", 18, 100, severity=dq.SEVERITY_WARN, threshold=0.02),
-                dq.between("limit_to_income_ratio", 0.0, 10.0, severity=dq.SEVERITY_WARN,
-                           threshold=0.05),
+                dq.between(
+                    "limit_to_income_ratio", 0.0, 10.0, severity=dq.SEVERITY_WARN, threshold=0.05
+                ),
                 dq.row_count_min(1),
             ],
         )

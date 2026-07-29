@@ -34,8 +34,6 @@ from __future__ import annotations
 
 import json
 from datetime import datetime, timezone
-from pathlib import Path
-from typing import Dict, List, Tuple
 
 import numpy as np
 import pandas as pd
@@ -53,13 +51,14 @@ SCORES_TABLE = "fraud_model_scores"
 
 # Custos usados para escolher o ponto de operacao (valores tipicos de mercado,
 # ajustaveis pela operacao).
-COST_MANUAL_REVIEW = 12.0        # R$ por transacao enviada para analise humana
-FRAUD_RECOVERY_RATE = 0.85       # fracao do valor salva quando a fraude e barrada
+COST_MANUAL_REVIEW = 12.0  # R$ por transacao enviada para analise humana
+FRAUD_RECOVERY_RATE = 0.85  # fracao do valor salva quando a fraude e barrada
 
 
 # ===========================================================================
 # Preparacao do dataset
 # ===========================================================================
+
 
 def load_dataset() -> pd.DataFrame:
     """Materializa o training set da feature store em pandas."""
@@ -67,13 +66,17 @@ def load_dataset() -> pd.DataFrame:
     training = build_training_set(spark)
 
     pdf = training.toPandas()
-    log.info("Dataset carregado: %s linhas x %s colunas | fraudes: %s (%.2f%%)",
-             len(pdf), pdf.shape[1], int(pdf[TARGET].sum()),
-             100 * pdf[TARGET].mean())
+    log.info(
+        "Dataset carregado: %s linhas x %s colunas | fraudes: %s (%.2f%%)",
+        len(pdf),
+        pdf.shape[1],
+        int(pdf[TARGET].sum()),
+        100 * pdf[TARGET].mean(),
+    )
     return pdf
 
 
-def split_features(pdf: pd.DataFrame) -> Tuple[List[str], List[str]]:
+def split_features(pdf: pd.DataFrame) -> tuple[list[str], list[str]]:
     """Separa as colunas de feature em numericas e categoricas.
 
     Convencao do projeto: features de transacao tem prefixo `tf_`, features de
@@ -88,17 +91,23 @@ def split_features(pdf: pd.DataFrame) -> Tuple[List[str], List[str]]:
     return numeric, categorical
 
 
-def temporal_split(pdf: pd.DataFrame, train_ratio: float = 0.75
-                   ) -> Tuple[pd.DataFrame, pd.DataFrame]:
+def temporal_split(
+    pdf: pd.DataFrame, train_ratio: float = 0.75
+) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Divide o dataset no tempo: passado para treino, futuro para teste."""
     pdf = pdf.sort_values("event_ts").reset_index(drop=True)
     cut_index = int(len(pdf) * train_ratio)
     cut_date = pdf.loc[cut_index, "event_ts"]
     train = pdf[pdf["event_ts"] < cut_date]
     test = pdf[pdf["event_ts"] >= cut_date]
-    log.info("Split temporal em %s | treino=%s (%.2f%% fraude) | teste=%s (%.2f%% fraude)",
-             cut_date, len(train), 100 * train[TARGET].mean(),
-             len(test), 100 * test[TARGET].mean())
+    log.info(
+        "Split temporal em %s | treino=%s (%.2f%% fraude) | teste=%s (%.2f%% fraude)",
+        cut_date,
+        len(train),
+        100 * train[TARGET].mean(),
+        len(test),
+        100 * test[TARGET].mean(),
+    )
     return train, test
 
 
@@ -106,7 +115,8 @@ def temporal_split(pdf: pd.DataFrame, train_ratio: float = 0.75
 # Modelo
 # ===========================================================================
 
-def build_pipeline(numeric: List[str], categorical: List[str], scale_pos_weight: float):
+
+def build_pipeline(numeric: list[str], categorical: list[str], scale_pos_weight: float):
     """Monta o pipeline de pre-processamento + classificador.
 
     Usa XGBoost quando disponivel (padrao de mercado para tabular) e cai para o
@@ -122,11 +132,21 @@ def build_pipeline(numeric: List[str], categorical: List[str], scale_pos_weight:
         transformers=[
             # Arvores nao precisam de escala, mas precisam de valor preenchido.
             ("num", SimpleImputer(strategy="median"), numeric),
-            ("cat", Pipeline([
-                ("impute", SimpleImputer(strategy="constant", fill_value="desconhecido")),
-                ("onehot", OneHotEncoder(handle_unknown="ignore", min_frequency=20,
-                                         sparse_output=False)),
-            ]), categorical),
+            (
+                "cat",
+                Pipeline(
+                    [
+                        ("impute", SimpleImputer(strategy="constant", fill_value="desconhecido")),
+                        (
+                            "onehot",
+                            OneHotEncoder(
+                                handle_unknown="ignore", min_frequency=20, sparse_output=False
+                            ),
+                        ),
+                    ]
+                ),
+                categorical,
+            ),
         ],
         remainder="drop",
     )
@@ -135,19 +155,30 @@ def build_pipeline(numeric: List[str], categorical: List[str], scale_pos_weight:
         from xgboost import XGBClassifier
 
         model = XGBClassifier(
-            n_estimators=400, max_depth=5, learning_rate=0.08,
-            subsample=0.9, colsample_bytree=0.8, reg_lambda=1.5,
+            n_estimators=400,
+            max_depth=5,
+            learning_rate=0.08,
+            subsample=0.9,
+            colsample_bytree=0.8,
+            reg_lambda=1.5,
             # Compensa o desbalanceamento sem jogar dado fora (nada de undersampling).
             scale_pos_weight=scale_pos_weight,
-            eval_metric="aucpr", n_jobs=-1, random_state=42, tree_method="hist",
+            eval_metric="aucpr",
+            n_jobs=-1,
+            random_state=42,
+            tree_method="hist",
         )
         algorithm = "XGBClassifier"
     except ImportError:
         from sklearn.ensemble import HistGradientBoostingClassifier
 
         model = HistGradientBoostingClassifier(
-            max_iter=400, max_depth=6, learning_rate=0.08,
-            l2_regularization=1.0, class_weight="balanced", random_state=42,
+            max_iter=400,
+            max_depth=6,
+            learning_rate=0.08,
+            l2_regularization=1.0,
+            class_weight="balanced",
+            random_state=42,
         )
         algorithm = "HistGradientBoostingClassifier"
 
@@ -159,7 +190,8 @@ def build_pipeline(numeric: List[str], categorical: List[str], scale_pos_weight:
 # Avaliacao
 # ===========================================================================
 
-def evaluate(y_true: np.ndarray, y_score: np.ndarray, amounts: np.ndarray) -> Dict:
+
+def evaluate(y_true: np.ndarray, y_score: np.ndarray, amounts: np.ndarray) -> dict:
     """Metricas estatisticas + a leitura financeira do modelo."""
     from sklearn.metrics import average_precision_score, roc_auc_score
 
@@ -182,35 +214,43 @@ def evaluate(y_true: np.ndarray, y_score: np.ndarray, amounts: np.ndarray) -> Di
         # Beneficio = valor de fraude barrado; custo = analistas revisando alertas.
         value_saved = float(amounts[flagged & (y_true == 1)].sum()) * FRAUD_RECOVERY_RATE
         review_cost = n_flagged * COST_MANUAL_REVIEW
-        sweep.append({
-            "limiar": round(float(threshold), 2),
-            "sinalizadas": n_flagged,
-            "taxa_de_revisao": round(n_flagged / len(y_true), 4),
-            "precisao": round(precision, 4),
-            "recall": round(recall, 4),
-            "f1": round(2 * precision * recall / max(precision + recall, 1e-9), 4),
-            "valor_salvo": round(value_saved, 2),
-            "custo_revisao": round(review_cost, 2),
-            "resultado_liquido": round(value_saved - review_cost, 2),
-        })
+        sweep.append(
+            {
+                "limiar": round(float(threshold), 2),
+                "sinalizadas": n_flagged,
+                "taxa_de_revisao": round(n_flagged / len(y_true), 4),
+                "precisao": round(precision, 4),
+                "recall": round(recall, 4),
+                "f1": round(2 * precision * recall / max(precision + recall, 1e-9), 4),
+                "valor_salvo": round(value_saved, 2),
+                "custo_revisao": round(review_cost, 2),
+                "resultado_liquido": round(value_saved - review_cost, 2),
+            }
+        )
 
     metrics["varredura_de_limiares"] = sweep
     if sweep:
         best = max(sweep, key=lambda row: row["resultado_liquido"])
         metrics["ponto_de_operacao"] = best
-        log.info("Melhor ponto de operacao: limiar=%s | precisao=%.3f | recall=%.3f | "
-                 "resultado liquido=R$ %s", best["limiar"], best["precisao"],
-                 best["recall"], best["resultado_liquido"])
+        log.info(
+            "Melhor ponto de operacao: limiar=%s | precisao=%.3f | recall=%.3f | "
+            "resultado liquido=R$ %s",
+            best["limiar"],
+            best["precisao"],
+            best["recall"],
+            best["resultado_liquido"],
+        )
     return metrics
 
 
-def evaluate_rule_baseline(test: pd.DataFrame, threshold: int = 45) -> Dict:
+def evaluate_rule_baseline(test: pd.DataFrame, threshold: int = 45) -> dict:
     """Mesma avaliacao aplicada ao motor de regras, para comparacao justa."""
     flagged = test["fraud_score_rule"] >= threshold
     n_flagged = int(flagged.sum())
     tp = int((flagged & (test[TARGET] == 1)).sum())
-    value_saved = float(test.loc[flagged & (test[TARGET] == 1), "tf_amount"].sum()) \
-        * FRAUD_RECOVERY_RATE
+    value_saved = (
+        float(test.loc[flagged & (test[TARGET] == 1), "tf_amount"].sum()) * FRAUD_RECOVERY_RATE
+    )
     return {
         "limiar": threshold,
         "sinalizadas": n_flagged,
@@ -221,8 +261,9 @@ def evaluate_rule_baseline(test: pd.DataFrame, threshold: int = 45) -> Dict:
     }
 
 
-def extract_feature_importance(pipeline, X_test: pd.DataFrame, y_test: pd.Series,
-                               top_n: int = 20) -> List[Dict]:
+def extract_feature_importance(
+    pipeline, X_test: pd.DataFrame, y_test: pd.Series, top_n: int = 20
+) -> list[dict]:
     """Extrai a importancia das features, ja com os nomes pos one-hot.
 
     Usa a importancia nativa quando o algoritmo expoe uma (caso do XGBoost) e
@@ -236,8 +277,11 @@ def extract_feature_importance(pipeline, X_test: pd.DataFrame, y_test: pd.Series
     if native is not None:
         names = pipeline.named_steps["prep"].get_feature_names_out()
         ranking = sorted(zip(names, native), key=lambda item: item[1], reverse=True)
-        return [{"feature": str(name), "importancia": round(float(value), 5), "metodo": "nativa"}
-                for name, value in ranking[:top_n] if value > 0]
+        return [
+            {"feature": str(name), "importancia": round(float(value), 5), "metodo": "nativa"}
+            for name, value in ranking[:top_n]
+            if value > 0
+        ]
 
     try:
         from sklearn.inspection import permutation_importance
@@ -252,14 +296,22 @@ def extract_feature_importance(pipeline, X_test: pd.DataFrame, y_test: pd.Series
             X_sample, y_sample = X_test, y_test
 
         result = permutation_importance(
-            pipeline, X_sample, y_sample, n_repeats=3, random_state=42,
-            scoring="average_precision", n_jobs=-1,
+            pipeline,
+            X_sample,
+            y_sample,
+            n_repeats=3,
+            random_state=42,
+            scoring="average_precision",
+            n_jobs=-1,
         )
-        ranking = sorted(zip(X_sample.columns, result.importances_mean),
-                         key=lambda item: item[1], reverse=True)
-        return [{"feature": str(name), "importancia": round(float(value), 5),
-                 "metodo": "permutacao"}
-                for name, value in ranking[:top_n] if value > 0]
+        ranking = sorted(
+            zip(X_sample.columns, result.importances_mean), key=lambda item: item[1], reverse=True
+        )
+        return [
+            {"feature": str(name), "importancia": round(float(value), 5), "metodo": "permutacao"}
+            for name, value in ranking[:top_n]
+            if value > 0
+        ]
     except Exception as exc:  # pragma: no cover - depende do ambiente
         log.warning("Nao foi possivel calcular a importancia das features: %s", exc)
         return []
@@ -269,7 +321,8 @@ def extract_feature_importance(pipeline, X_test: pd.DataFrame, y_test: pd.Series
 # Execucao
 # ===========================================================================
 
-def run() -> Dict:
+
+def run() -> dict:
     cfg = get_settings()
     artifacts = cfg.layer_path("artifacts")
     artifacts.mkdir(parents=True, exist_ok=True)
@@ -287,15 +340,19 @@ def run() -> Dict:
         pipeline.fit(train[feature_columns], train[TARGET])
 
         y_score = pipeline.predict_proba(test[feature_columns])[:, 1]
-        model_metrics = evaluate(test[TARGET].to_numpy(), y_score,
-                                 test["tf_amount"].to_numpy())
+        model_metrics = evaluate(test[TARGET].to_numpy(), y_score, test["tf_amount"].to_numpy())
         baseline_metrics = evaluate_rule_baseline(test)
 
         operating_point = model_metrics.get("ponto_de_operacao", {})
-        uplift = round(operating_point.get("resultado_liquido", 0.0)
-                       - baseline_metrics["resultado_liquido"], 2)
-        log.info("Modelo x regras -> recall %.3f vs %.3f | ganho financeiro R$ %s",
-                 operating_point.get("recall", 0.0), baseline_metrics["recall"], uplift)
+        uplift = round(
+            operating_point.get("resultado_liquido", 0.0) - baseline_metrics["resultado_liquido"], 2
+        )
+        log.info(
+            "Modelo x regras -> recall %.3f vs %.3f | ganho financeiro R$ %s",
+            operating_point.get("recall", 0.0),
+            baseline_metrics["recall"],
+            uplift,
+        )
 
         report = {
             "treinado_em": datetime.now(timezone.utc).isoformat(),
@@ -308,7 +365,8 @@ def run() -> Dict:
             "baseline_regras": baseline_metrics,
             "ganho_sobre_baseline": uplift,
             "importancia_features": extract_feature_importance(
-                pipeline, test[feature_columns], test[TARGET]),
+                pipeline, test[feature_columns], test[TARGET]
+            ),
         }
 
         # --- Persistencia dos artefatos --------------------------------------
@@ -325,8 +383,9 @@ def run() -> Dict:
         # para o monitoramento de drift, nao so dentro de um notebook.
         spark = get_spark("train_fraud_model")
         threshold = float(operating_point.get("limiar", 0.5))
-        scores = test[["transaction_id", "customer_id", "event_date", "tf_amount",
-                       "fraud_score_rule", TARGET]].copy()
+        scores = test[
+            ["transaction_id", "customer_id", "event_date", "tf_amount", "fraud_score_rule", TARGET]
+        ].copy()
         scores["model_score"] = y_score
         scores["model_flag"] = (scores["model_score"] >= threshold).astype(int)
         scores["model_version"] = f"{algorithm}-{datetime.now(timezone.utc):%Y%m%d}"
@@ -334,8 +393,13 @@ def run() -> Dict:
 
         scores_df = spark.createDataFrame(scores)
         path = cfg.table_path("feature_store", SCORES_TABLE)
-        write_delta(scores_df, path, mode="overwrite", overwrite_schema=True,
-                    comment=f"scores do modelo de fraude ({algorithm})")
+        write_delta(
+            scores_df,
+            path,
+            mode="overwrite",
+            overwrite_schema=True,
+            comment=f"scores do modelo de fraude ({algorithm})",
+        )
         register_table(spark, cfg.full_table_name("feature_store", SCORES_TABLE), path)
 
         return report

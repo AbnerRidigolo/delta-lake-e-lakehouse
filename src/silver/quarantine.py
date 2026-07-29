@@ -19,7 +19,7 @@ from pyspark.sql import DataFrame
 from pyspark.sql import functions as F
 
 from src.common.config import get_settings
-from src.common.delta_io import write_delta
+from src.common.delta_io import PIPELINE_RUN_ID, write_delta
 from src.common.logging_utils import get_logger
 
 log = get_logger(__name__)
@@ -41,13 +41,24 @@ def quarantine(df: DataFrame, table: str) -> int:
     payload = (
         df.withColumn("_quarantined_at", F.current_timestamp())
         .withColumn("_quarantine_date", F.current_date())
+        # Sem o run_id nao da para conciliar "bronze == silver + quarentena" de
+        # uma execucao especifica: a quarentena e append-only e acumula historico.
+        .withColumn("_pipeline_run_id", F.lit(PIPELINE_RUN_ID))
     )
-    write_delta(payload, path, mode="append", partition_by=["_quarantine_date"],
-                merge_schema=True, comment=f"quarentena silver.{table}")
+    write_delta(
+        payload,
+        path,
+        mode="append",
+        partition_by=["_quarantine_date"],
+        merge_schema=True,
+        comment=f"quarentena silver.{table}",
+    )
 
-    breakdown = (
-        df.groupBy("_reject_reason").count().orderBy(F.desc("count")).collect()
+    breakdown = df.groupBy("_reject_reason").count().orderBy(F.desc("count")).collect()
+    log.warning(
+        "Quarentena %s: %s registros rejeitados | %s",
+        table,
+        count,
+        {row["_reject_reason"]: row["count"] for row in breakdown},
     )
-    log.warning("Quarentena %s: %s registros rejeitados | %s", table, count,
-                {row["_reject_reason"]: row["count"] for row in breakdown})
     return count

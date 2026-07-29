@@ -62,10 +62,16 @@ def run() -> None:
 
     # ==================================================================== v0
     _banner("VERSAO 0 - carga inicial")
-    base = source.select("transaction_id", "event_date", "customer_id", "merchant_id",
-                         "amount", "channel", "status").limit(5000)
-    write_delta(base, demo_path, mode="overwrite", partition_by=["event_date"],
-                comment="carga inicial da demo")
+    base = source.select(
+        "transaction_id", "event_date", "customer_id", "merchant_id", "amount", "channel", "status"
+    ).limit(5000)
+    write_delta(
+        base,
+        demo_path,
+        mode="overwrite",
+        partition_by=["event_date"],
+        comment="carga inicial da demo",
+    )
     print(f"Linhas gravadas: {read_delta(spark, demo_path).count()}")
 
     # ==================================================================== v1
@@ -75,22 +81,40 @@ def run() -> None:
     print("a tabela e sem quebrar quem le so as colunas antigas.\n")
 
     incremento = (
-        source.select("transaction_id", "event_date", "customer_id", "merchant_id",
-                      "amount", "channel", "status")
-        .orderBy(F.desc("event_date")).limit(300)
+        source.select(
+            "transaction_id",
+            "event_date",
+            "customer_id",
+            "merchant_id",
+            "amount",
+            "channel",
+            "status",
+        )
+        .orderBy(F.desc("event_date"))
+        .limit(300)
         .withColumn("review_channel", F.lit("app_notificacao"))
     )
-    write_delta(incremento, demo_path, mode="append", partition_by=["event_date"],
-                merge_schema=True, comment="schema evolution: +review_channel")
+    write_delta(
+        incremento,
+        demo_path,
+        mode="append",
+        partition_by=["event_date"],
+        merge_schema=True,
+        comment="schema evolution: +review_channel",
+    )
 
     evolved = read_delta(spark, demo_path)
     print("Schema apos a evolucao:")
     for field in evolved.schema.fields:
         print(f"   - {field.name}: {field.dataType.simpleString()}")
-    print(f"\nLinhas com a coluna nova preenchida: "
-          f"{evolved.where(F.col('review_channel').isNotNull()).count()}")
-    print(f"Linhas antigas (review_channel NULL): "
-          f"{evolved.where(F.col('review_channel').isNull()).count()}")
+    print(
+        f"\nLinhas com a coluna nova preenchida: "
+        f"{evolved.where(F.col('review_channel').isNotNull()).count()}"
+    )
+    print(
+        f"Linhas antigas (review_channel NULL): "
+        f"{evolved.where(F.col('review_channel').isNull()).count()}"
+    )
 
     # ==================================================================== v2
     _banner("VERSAO 2 - MERGE (correcao tardia da origem, sem duplicar)")
@@ -104,27 +128,38 @@ def run() -> None:
     amostra = read_delta(spark, demo_path).limit(50).select("transaction_id").collect()
     ids = [row["transaction_id"] for row in amostra]
 
-    antes = read_delta(spark, demo_path).where(F.col("transaction_id").isin(ids)) \
-        .agg(F.round(F.sum("amount"), 2)).collect()[0][0]
+    antes = (
+        read_delta(spark, demo_path)
+        .where(F.col("transaction_id").isin(ids))
+        .agg(F.round(F.sum("amount"), 2))
+        .collect()[0][0]
+    )
 
     correcoes = (
-        read_delta(spark, demo_path).where(F.col("transaction_id").isin(ids))
-        .select("transaction_id", "event_date", "customer_id", "merchant_id",
-                "channel", "status")
+        read_delta(spark, demo_path)
+        .where(F.col("transaction_id").isin(ids))
+        .select("transaction_id", "event_date", "customer_id", "merchant_id", "channel", "status")
         # A origem corrigiu: os valores estavam 10% menores do que o real.
         .withColumn("amount", F.lit(999.99))
         .withColumn("review_channel", F.lit("correcao_origem"))
     )
 
-    (target.alias("destino")
-     .merge(correcoes.alias("origem"), "destino.transaction_id = origem.transaction_id")
-     .whenMatchedUpdate(set={"amount": "origem.amount",
-                             "review_channel": "origem.review_channel"})
-     .whenNotMatchedInsertAll()
-     .execute())
+    (
+        target.alias("destino")
+        .merge(correcoes.alias("origem"), "destino.transaction_id = origem.transaction_id")
+        .whenMatchedUpdate(
+            set={"amount": "origem.amount", "review_channel": "origem.review_channel"}
+        )
+        .whenNotMatchedInsertAll()
+        .execute()
+    )
 
-    depois = read_delta(spark, demo_path).where(F.col("transaction_id").isin(ids)) \
-        .agg(F.round(F.sum("amount"), 2)).collect()[0][0]
+    depois = (
+        read_delta(spark, demo_path)
+        .where(F.col("transaction_id").isin(ids))
+        .agg(F.round(F.sum("amount"), 2))
+        .collect()[0][0]
+    )
     print(f"Soma dos 50 registros antes do MERGE:  R$ {antes}")
     print(f"Soma dos 50 registros depois do MERGE: R$ {depois}")
     print(f"Total de linhas (nao mudou, foi UPDATE): {read_delta(spark, demo_path).count()}")
@@ -138,8 +173,7 @@ def run() -> None:
 
     # ============================================================== time travel
     _banner("TIME TRAVEL - lendo o passado")
-    versions = [row["version"] for row in
-                describe_history(spark, demo_path, limit=20).collect()]
+    versions = [row["version"] for row in describe_history(spark, demo_path, limit=20).collect()]
     for version in sorted(versions):
         snapshot = read_delta(spark, demo_path, version=version)
         columns = len(snapshot.columns)
@@ -149,9 +183,12 @@ def run() -> None:
     primeiro_id = ids[0]
     for version in (0, max(versions)):
         try:
-            valor = (read_delta(spark, demo_path, version=version)
-                     .where(F.col("transaction_id") == primeiro_id)
-                     .select("amount").collect())
+            valor = (
+                read_delta(spark, demo_path, version=version)
+                .where(F.col("transaction_id") == primeiro_id)
+                .select("amount")
+                .collect()
+            )
             print(f"   versao {version}: amount = {valor[0]['amount'] if valor else 'ausente'}")
         except Exception as exc:
             print(f"   versao {version}: indisponivel ({exc})")
@@ -167,8 +204,12 @@ def run() -> None:
     versao_antes_do_merge = max(versions) - 1
     spark.sql(f"RESTORE TABLE delta.`{demo_path}` TO VERSION AS OF {versao_antes_do_merge}")
 
-    restaurado = read_delta(spark, demo_path).where(F.col("transaction_id").isin(ids)) \
-        .agg(F.round(F.sum("amount"), 2)).collect()[0][0]
+    restaurado = (
+        read_delta(spark, demo_path)
+        .where(F.col("transaction_id").isin(ids))
+        .agg(F.round(F.sum("amount"), 2))
+        .collect()[0][0]
+    )
     print(f"Soma apos o RESTORE: R$ {restaurado} (era R$ {antes} antes do MERGE)")
     print("O RESTORE tambem e um commit: nada foi perdido, so voltamos no tempo.")
 
@@ -177,13 +218,17 @@ def run() -> None:
     print("Uma CHECK constraint impede que dado invalido entre na tabela, mesmo que")
     print("o job tenha bug. E a ultima linha de defesa da qualidade.\n")
 
-    spark.sql(f"ALTER TABLE delta.`{demo_path}` "
-              "ADD CONSTRAINT valor_positivo CHECK (amount > 0)")
+    spark.sql(
+        f"ALTER TABLE delta.`{demo_path}` " "ADD CONSTRAINT valor_positivo CHECK (amount > 0)"
+    )
     print("Constraint `valor_positivo` criada. Tentando inserir um valor negativo...")
 
-    invalido = read_delta(spark, demo_path).limit(1) \
-        .withColumn("amount", F.lit(-50.0)) \
+    invalido = (
+        read_delta(spark, demo_path)
+        .limit(1)
+        .withColumn("amount", F.lit(-50.0))
         .withColumn("transaction_id", F.lit("TXN-INVALIDA"))
+    )
     print("   (o Spark vai imprimir um stack trace abaixo - e o esperado: a")
     print("    violacao acontece dentro da task, no momento da gravacao)\n")
     try:
@@ -192,8 +237,11 @@ def run() -> None:
     except Exception as exc:
         # A causa util fica no meio do stack trace do Java; extraimos so ela.
         detalhe = next(
-            (linha.strip() for linha in str(exc).splitlines()
-             if "CHECK constraint" in linha or "InvariantViolation" in linha),
+            (
+                linha.strip()
+                for linha in str(exc).splitlines()
+                if "CHECK constraint" in linha or "InvariantViolation" in linha
+            ),
             str(exc).strip().splitlines()[0],
         )
         print(f"\n   [OK] Escrita REJEITADA pelo Delta: {detalhe[:160]}")

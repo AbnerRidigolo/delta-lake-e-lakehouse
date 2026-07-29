@@ -21,7 +21,7 @@ from __future__ import annotations
 import os
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any
 
 import yaml
 
@@ -53,33 +53,35 @@ class Settings:
     caminhos de camada e caminhos de tabela.
     """
 
-    def __init__(self, data: Dict[str, Any], root: Path) -> None:
+    def __init__(self, data: dict[str, Any], root: Path) -> None:
         self.raw = data
         self.project_root = root
+        # Preenchido por `get_settings()`; util para logar em qual perfil o job rodou.
+        self.profile = "default"
 
     # -- blocos da configuracao ---------------------------------------------
     @property
-    def project(self) -> Dict[str, Any]:
+    def project(self) -> dict[str, Any]:
         return self.raw["project"]
 
     @property
-    def spark(self) -> Dict[str, Any]:
+    def spark(self) -> dict[str, Any]:
         return self.raw["spark"]
 
     @property
-    def data_generation(self) -> Dict[str, Any]:
+    def data_generation(self) -> dict[str, Any]:
         return self.raw["data_generation"]
 
     @property
-    def business_rules(self) -> Dict[str, Any]:
+    def business_rules(self) -> dict[str, Any]:
         return self.raw["business_rules"]
 
     @property
-    def ml(self) -> Dict[str, Any]:
+    def ml(self) -> dict[str, Any]:
         return self.raw["ml"]
 
     @property
-    def ai(self) -> Dict[str, Any]:
+    def ai(self) -> dict[str, Any]:
         return self.raw["ai"]
 
     @property
@@ -102,11 +104,23 @@ class Settings:
             base_root = self.raw["paths"]["root"]
             relative = str(configured)
             if relative.startswith(base_root):
-                relative = relative[len(base_root):].lstrip("/")
-            return Path(override_root) / relative if relative else Path(override_root)
+                relative = relative[len(base_root) :].lstrip("/")
+            root = Path(override_root)
+            candidate = root / relative if relative else root
+        else:
+            candidate = Path(configured)
 
-        candidate = Path(configured)
-        return candidate if candidate.is_absolute() else self.project_root / candidate
+        # SEMPRE absoluto. A sintaxe SQL do Delta (`delta.`<caminho>``) nao
+        # resolve caminho relativo contra o diretorio de trabalho - ela procura
+        # no catalogo e falha com TABLE_OR_VIEW_NOT_FOUND. O DataFrameReader
+        # aceitaria relativo, o que torna o bug intermitente e confuso: funciona
+        # na leitura e quebra no ALTER TABLE.
+        if candidate.is_absolute():
+            return candidate
+        # Um LAKEHOUSE_ROOT relativo (ex.: "data-ci") e resolvido contra a raiz
+        # do projeto, e nao contra o CWD, para o comportamento nao depender de
+        # onde o comando foi disparado.
+        return (self.project_root / candidate).resolve()
 
     def table_path(self, layer: str, table: str) -> str:
         """Caminho fisico de uma tabela Delta dentro de uma camada."""
@@ -139,10 +153,46 @@ class Settings:
             self.layer_path(layer).mkdir(parents=True, exist_ok=True)
 
 
+def _deep_merge(base: dict[str, Any], overlay: dict[str, Any]) -> dict[str, Any]:
+    """Mescla `overlay` sobre `base` recursivamente (o overlay vence)."""
+    result = dict(base)
+    for key, value in overlay.items():
+        if isinstance(value, dict) and isinstance(result.get(key), dict):
+            result[key] = _deep_merge(result[key], value)
+        else:
+            result[key] = value
+    return result
+
+
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
-    """Le e memoriza a configuracao (o YAML e lido uma unica vez por processo)."""
+    """Le e memoriza a configuracao (o YAML e lido uma unica vez por processo).
+
+    Perfis
+    ------
+    A variavel de ambiente `LAKEHOUSE_PROFILE` seleciona um overlay que e
+    mesclado sobre `config/settings.yaml`:
+
+        LAKEHOUSE_PROFILE=ci  ->  config/settings.yaml + config/settings.ci.yaml
+
+    O overlay so precisa declarar o que muda - o resto vem da configuracao base.
+    E assim que o CI roda o pipeline inteiro com um dataset reduzido sem manter
+    uma segunda copia da configuracao (que inevitavelmente divergiria).
+    """
     root = find_project_root()
-    with open(root / _MARKER, "r", encoding="utf-8") as handle:
+    with open(root / _MARKER, encoding="utf-8") as handle:
         data = yaml.safe_load(handle)
-    return Settings(data, root)
+
+    profile = os.getenv("LAKEHOUSE_PROFILE", "").strip()
+    if profile:
+        overlay_path = root / "config" / f"settings.{profile}.yaml"
+        if not overlay_path.exists():
+            raise FileNotFoundError(
+                f"Perfil `{profile}` selecionado, mas {overlay_path} nao existe."
+            )
+        with open(overlay_path, encoding="utf-8") as handle:
+            data = _deep_merge(data, yaml.safe_load(handle) or {})
+
+    settings = Settings(data, root)
+    settings.profile = profile or "default"
+    return settings

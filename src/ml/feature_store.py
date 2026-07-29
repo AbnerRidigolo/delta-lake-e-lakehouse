@@ -33,7 +33,6 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
-from typing import List
 
 from pyspark.sql import DataFrame, SparkSession, Window
 from pyspark.sql import functions as F
@@ -66,15 +65,17 @@ class FeatureViewMeta:
     point_in_time: bool
 
 
-FEATURE_VIEWS: List[FeatureViewMeta] = [
+FEATURE_VIEWS: list[FeatureViewMeta] = [
     FeatureViewMeta(
         name="feature_store.customer_features",
         entity="customer",
         primary_keys="customer_id, feature_month",
         timestamp_key="feature_month",
-        description=("Snapshot mensal acumulado do comportamento do cliente: volume, "
-                     "ticket, mix de canais, diversidade de lojistas/dispositivos e "
-                     "historico de contestacao."),
+        description=(
+            "Snapshot mensal acumulado do comportamento do cliente: volume, "
+            "ticket, mix de canais, diversidade de lojistas/dispositivos e "
+            "historico de contestacao."
+        ),
         source_tables="silver.transactions, silver.customers",
         owner="squad-ml-platform",
         refresh="mensal (D+1 do fechamento)",
@@ -85,9 +86,11 @@ FEATURE_VIEWS: List[FeatureViewMeta] = [
         entity="transaction",
         primary_keys="transaction_id",
         timestamp_key="event_ts",
-        description=("Features por transacao para o modelo de fraude: valor, canal, "
-                     "velocity, dispositivo novo, desvio do padrao do cliente e sinais "
-                     "do estabelecimento."),
+        description=(
+            "Features por transacao para o modelo de fraude: valor, canal, "
+            "velocity, dispositivo novo, desvio do padrao do cliente e sinais "
+            "do estabelecimento."
+        ),
         source_tables="gold.transaction_fraud_signals",
         owner="squad-ml-platform",
         refresh="continuo (segue o streaming)",
@@ -99,6 +102,7 @@ FEATURE_VIEWS: List[FeatureViewMeta] = [
 # ===========================================================================
 # Feature view 1: snapshot mensal do cliente
 # ===========================================================================
+
 
 def build_customer_features(spark: SparkSession) -> DataFrame:
     """Constroi o snapshot mensal acumulado por cliente.
@@ -130,13 +134,15 @@ def build_customer_features(spark: SparkSession) -> DataFrame:
     )
 
     # Janela acumulada: do primeiro mes do cliente ate o mes corrente.
-    cumulative = Window.partitionBy("customer_id").orderBy("feature_month") \
+    cumulative = (
+        Window.partitionBy("customer_id")
+        .orderBy("feature_month")
         .rowsBetween(Window.unboundedPreceding, Window.currentRow)
+    )
     last_3m = Window.partitionBy("customer_id").orderBy("feature_month").rowsBetween(-2, 0)
 
     features = (
-        monthly
-        .withColumnRenamed("event_month", "feature_month")
+        monthly.withColumnRenamed("event_month", "feature_month")
         # --- acumulado historico (lifetime ate o mes) ------------------------
         .withColumn("cf_txn_count_lifetime", F.sum("m_txn_count").over(cumulative))
         .withColumn("cf_tpv_lifetime", F.round(F.sum("m_tpv").over(cumulative), 2))
@@ -149,21 +155,36 @@ def build_customer_features(spark: SparkSession) -> DataFrame:
         .withColumn("cf_tpv_3m", F.round(F.sum("m_tpv").over(last_3m), 2))
         .withColumn("cf_avg_ticket_3m", F.round(F.avg("m_avg_ticket").over(last_3m), 2))
         .withColumn("cf_max_ticket_3m", F.round(F.max("m_max_ticket").over(last_3m), 2))
-        .withColumn("cf_distinct_merchants_3m", F.round(F.avg("m_distinct_merchants").over(last_3m), 2))
+        .withColumn(
+            "cf_distinct_merchants_3m", F.round(F.avg("m_distinct_merchants").over(last_3m), 2)
+        )
         .withColumn("cf_distinct_devices_3m", F.round(F.avg("m_distinct_devices").over(last_3m), 2))
         .withColumn("cf_cnp_share_3m", F.round(F.avg("m_cnp_share").over(last_3m), 4))
         .withColumn("cf_night_share_3m", F.round(F.avg("m_night_share").over(last_3m), 4))
         .withColumn("cf_pix_share_3m", F.round(F.avg("m_pix_share").over(last_3m), 4))
         # --- taxas derivadas -------------------------------------------------
-        .withColumn("cf_chargeback_rate_lifetime",
-                    F.round(F.col("cf_chargebacks_lifetime")
-                            / F.greatest(F.col("cf_txn_count_lifetime"), F.lit(1)), 5))
-        .withColumn("cf_decline_rate_lifetime",
-                    F.round(F.col("cf_declines_lifetime")
-                            / F.greatest(F.col("cf_txn_count_lifetime"), F.lit(1)), 5))
-        .withColumn("cf_avg_ticket_lifetime",
-                    F.round(F.col("cf_tpv_lifetime")
-                            / F.greatest(F.col("cf_txn_count_lifetime"), F.lit(1)), 2))
+        .withColumn(
+            "cf_chargeback_rate_lifetime",
+            F.round(
+                F.col("cf_chargebacks_lifetime")
+                / F.greatest(F.col("cf_txn_count_lifetime"), F.lit(1)),
+                5,
+            ),
+        )
+        .withColumn(
+            "cf_decline_rate_lifetime",
+            F.round(
+                F.col("cf_declines_lifetime")
+                / F.greatest(F.col("cf_txn_count_lifetime"), F.lit(1)),
+                5,
+            ),
+        )
+        .withColumn(
+            "cf_avg_ticket_lifetime",
+            F.round(
+                F.col("cf_tpv_lifetime") / F.greatest(F.col("cf_txn_count_lifetime"), F.lit(1)), 2
+            ),
+        )
     )
 
     # Atributos cadastrais (mudam pouco) entram como features estaveis.
@@ -183,15 +204,27 @@ def build_customer_features(spark: SparkSession) -> DataFrame:
     return (
         features.join(F.broadcast(profile), on="customer_id", how="inner")
         .withColumn("_feature_generated_at", F.current_timestamp())
-        .drop("m_txn_count", "m_tpv", "m_avg_ticket", "m_max_ticket", "m_chargebacks",
-              "m_declines", "m_frauds", "m_distinct_merchants", "m_distinct_devices",
-              "m_cnp_share", "m_night_share", "m_pix_share")
+        .drop(
+            "m_txn_count",
+            "m_tpv",
+            "m_avg_ticket",
+            "m_max_ticket",
+            "m_chargebacks",
+            "m_declines",
+            "m_frauds",
+            "m_distinct_merchants",
+            "m_distinct_devices",
+            "m_cnp_share",
+            "m_night_share",
+            "m_pix_share",
+        )
     )
 
 
 # ===========================================================================
 # Feature view 2: features por transacao
 # ===========================================================================
+
 
 def build_transaction_features(spark: SparkSession) -> DataFrame:
     """Seleciona as features transacionais a partir dos sinais da Gold.
@@ -206,7 +239,11 @@ def build_transaction_features(spark: SparkSession) -> DataFrame:
 
     return signals.select(
         # chaves
-        "transaction_id", "customer_id", "merchant_id", "event_ts", "event_date",
+        "transaction_id",
+        "customer_id",
+        "merchant_id",
+        "event_ts",
+        "event_date",
         F.date_format(F.add_months(F.col("event_date"), -1), "yyyy-MM").alias("feature_month"),
         # --- features numericas -------------------------------------------
         F.col("amount").alias("tf_amount"),
@@ -221,7 +258,18 @@ def build_transaction_features(spark: SparkSession) -> DataFrame:
         F.coalesce(F.col("amount_zscore_customer"), F.lit(0.0)).alias("tf_amount_zscore"),
         F.col("amount_vs_merchant_avg").alias("tf_amount_vs_merchant_avg"),
         F.col("amount_to_income_ratio").alias("tf_amount_to_income"),
-        F.col("customer_txn_seq").alias("tf_customer_txn_seq"),
+        # NOTA: aqui existia `tf_customer_txn_seq` (o numero da transacao dentro
+        # do historico do cliente). O monitoramento de PSI deste projeto a
+        # reprovou com PSI = 0,93 - e estava certo. A feature e um contador
+        # monotonico: num split temporal, o periodo recente SEMPRE tem valores
+        # maiores, e em producao ela assume valores que nunca existiram no
+        # treino. Limitar o valor nao resolve: a tendencia permanece.
+        #
+        # A substituicao mantem o sinal util ("e a primeira compra desse
+        # cliente?", que e um marcador legitimo de fraude) sem a tendencia. O
+        # resto do sinal ja esta em `cf_active_months`, `cf_tenure_days` e
+        # `cf_txn_count_lifetime`, que sao estacionarios por construcao.
+        (F.col("customer_txn_seq") == 1).cast("int").alias("tf_is_first_transaction"),
         F.col("merchant_risk_score").alias("tf_merchant_risk_score"),
         F.col("mcc_intrinsic_risk").alias("tf_mcc_intrinsic_risk"),
         # --- features booleanas -------------------------------------------
@@ -249,6 +297,7 @@ def build_transaction_features(spark: SparkSession) -> DataFrame:
 # Montagem do dataset de treino (join point-in-time)
 # ===========================================================================
 
+
 def build_training_set(spark: SparkSession) -> DataFrame:
     """Junta features transacionais com o snapshot do cliente do mes ANTERIOR.
 
@@ -263,9 +312,11 @@ def build_training_set(spark: SparkSession) -> DataFrame:
     """
     cfg = get_settings()
     transaction_features = spark.read.format("delta").load(
-        cfg.table_path("feature_store", TRANSACTION_FEATURES))
+        cfg.table_path("feature_store", TRANSACTION_FEATURES)
+    )
     customer_features = spark.read.format("delta").load(
-        cfg.table_path("feature_store", CUSTOMER_FEATURES))
+        cfg.table_path("feature_store", CUSTOMER_FEATURES)
+    )
 
     return transaction_features.join(
         customer_features.drop("_feature_generated_at"),
@@ -282,22 +333,34 @@ def run() -> dict:
     with log_stage(log, f"feature_store.{CUSTOMER_FEATURES}"):
         customer_df = build_customer_features(spark)
         path = cfg.table_path("feature_store", CUSTOMER_FEATURES)
-        write_delta(customer_df, path, mode="overwrite", partition_by=["feature_month"],
-                    overwrite_schema=True, comment="snapshot mensal de features de cliente")
+        write_delta(
+            customer_df,
+            path,
+            mode="overwrite",
+            partition_by=["feature_month"],
+            overwrite_schema=True,
+            comment="snapshot mensal de features de cliente",
+        )
         register_table(spark, cfg.full_table_name("feature_store", CUSTOMER_FEATURES), path)
         counts[CUSTOMER_FEATURES] = spark.read.format("delta").load(path).count()
 
     with log_stage(log, f"feature_store.{TRANSACTION_FEATURES}"):
         txn_df = build_transaction_features(spark)
         path = cfg.table_path("feature_store", TRANSACTION_FEATURES)
-        write_delta(txn_df.repartition("event_date"), path, mode="overwrite",
-                    partition_by=["event_date"], overwrite_schema=True,
-                    comment="features transacionais para o modelo de fraude")
+        write_delta(
+            txn_df.repartition("event_date"),
+            path,
+            mode="overwrite",
+            partition_by=["event_date"],
+            overwrite_schema=True,
+            comment="features transacionais para o modelo de fraude",
+        )
         register_table(spark, cfg.full_table_name("feature_store", TRANSACTION_FEATURES), path)
         counts[TRANSACTION_FEATURES] = spark.read.format("delta").load(path).count()
 
         dq.run_quality_checks(
-            spark, spark.read.format("delta").load(path),
+            spark,
+            spark.read.format("delta").load(path),
             dataset=f"feature_store.{TRANSACTION_FEATURES}",
             expectations=[
                 dq.not_null("transaction_id"),
@@ -316,15 +379,24 @@ def run() -> dict:
         ]
         registry_df = spark.createDataFrame(registry_rows)
         path = cfg.table_path("feature_store", REGISTRY)
-        write_delta(registry_df, path, mode="overwrite", overwrite_schema=True,
-                    comment="catalogo das feature views")
+        write_delta(
+            registry_df,
+            path,
+            mode="overwrite",
+            overwrite_schema=True,
+            comment="catalogo das feature views",
+        )
 
     # Sanidade do join point-in-time: quantas transacoes ficaram sem snapshot.
     training = build_training_set(spark)
     total = training.count()
     without_profile = training.where(F.col("cf_txn_count_lifetime").isNull()).count()
-    log.info("Training set: %s linhas | %s (%.1f%%) sem snapshot anterior (clientes novos)",
-             total, without_profile, 100 * without_profile / max(total, 1))
+    log.info(
+        "Training set: %s linhas | %s (%.1f%%) sem snapshot anterior (clientes novos)",
+        total,
+        without_profile,
+        100 * without_profile / max(total, 1),
+    )
     counts["training_set"] = total
     return counts
 

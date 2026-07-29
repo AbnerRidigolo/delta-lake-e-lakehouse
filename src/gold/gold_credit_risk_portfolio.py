@@ -48,7 +48,7 @@ LGD_BY_PRODUCT = {
 }
 
 
-def _lgd_column() -> "F.Column":
+def _lgd_column() -> F.Column:
     column = F.lit(0.75)
     for product, lgd in LGD_BY_PRODUCT.items():
         column = F.when(F.col("product") == product, F.lit(lgd)).otherwise(column)
@@ -70,25 +70,38 @@ def build(spark: SparkSession) -> DataFrame:
         F.round(F.avg("interest_rate_month"), 5).alias("avg_monthly_rate"),
         F.round(F.avg("debt_to_income"), 4).alias("avg_debt_to_income"),
         F.round(F.avg("months_on_book"), 1).alias("avg_months_on_book"),
-
         # --- Inadimplencia ----------------------------------------------------
         F.sum(F.col("is_npl").cast("int")).alias("npl_contracts"),
-        F.round(F.sum(F.when(F.col("is_npl"), F.col("outstanding_balance")).otherwise(0.0)), 2)
-         .alias("npl_balance"),
+        F.round(
+            F.sum(F.when(F.col("is_npl"), F.col("outstanding_balance")).otherwise(0.0)), 2
+        ).alias("npl_balance"),
         F.round(F.sum("provision_amount"), 2).alias("provision_amount"),
         F.round(F.avg("days_past_due"), 1).alias("avg_days_past_due"),
         F.sum(F.col("is_written_off").cast("int")).alias("written_off_contracts"),
-        F.round(F.sum(F.when(F.col("is_written_off"), F.col("outstanding_balance")).otherwise(0.0)), 2)
-         .alias("written_off_balance"),
+        F.round(
+            F.sum(F.when(F.col("is_written_off"), F.col("outstanding_balance")).otherwise(0.0)), 2
+        ).alias("written_off_balance"),
         F.round(F.sum("recovery_amount"), 2).alias("recovery_amount"),
-
         # --- Distribuicao por faixa de atraso (util para o dashboard) ---------
-        F.round(F.avg(F.when(F.col("delinquency_bucket") == "current", 1.0).otherwise(0.0)), 4)
-         .alias("share_current"),
-        F.round(F.avg(F.when(F.col("delinquency_bucket").isin("dpd_1_15", "dpd_16_30"), 1.0)
-                      .otherwise(0.0)), 4).alias("share_early_delinquency"),
-        F.round(F.avg(F.when(F.col("delinquency_bucket").isin("dpd_91_180", "dpd_180_plus"), 1.0)
-                      .otherwise(0.0)), 4).alias("share_late_delinquency"),
+        F.round(
+            F.avg(F.when(F.col("delinquency_bucket") == "current", 1.0).otherwise(0.0)), 4
+        ).alias("share_current"),
+        F.round(
+            F.avg(
+                F.when(F.col("delinquency_bucket").isin("dpd_1_15", "dpd_16_30"), 1.0).otherwise(
+                    0.0
+                )
+            ),
+            4,
+        ).alias("share_early_delinquency"),
+        F.round(
+            F.avg(
+                F.when(
+                    F.col("delinquency_bucket").isin("dpd_91_180", "dpd_180_plus"), 1.0
+                ).otherwise(0.0)
+            ),
+            4,
+        ).alias("share_late_delinquency"),
     )
 
     return (
@@ -101,8 +114,11 @@ def build(spark: SparkSession) -> DataFrame:
             "lgd_observed",
             F.when(
                 F.col("written_off_balance") > 0,
-                F.round(1 - F.least(F.col("recovery_amount") / F.col("written_off_balance"),
-                                    F.lit(1.0)), 4),
+                F.round(
+                    1
+                    - F.least(F.col("recovery_amount") / F.col("written_off_balance"), F.lit(1.0)),
+                    4,
+                ),
             ).otherwise(F.col("lgd_assumption")),
         )
         # Perda esperada = EAD x PD x LGD (Basileia, versao simplificada).
@@ -110,25 +126,31 @@ def build(spark: SparkSession) -> DataFrame:
             "expected_loss",
             F.round(F.col("ead") * F.col("pd_observed") * F.col("lgd_assumption"), 2),
         )
-        .withColumn("expected_loss_rate",
-                    F.round(F.col("expected_loss") / F.greatest(F.col("ead"), F.lit(1.0)), 5))
-        .withColumn("npl_ratio",
-                    F.round(F.col("npl_balance") / F.greatest(F.col("ead"), F.lit(1.0)), 4))
+        .withColumn(
+            "expected_loss_rate",
+            F.round(F.col("expected_loss") / F.greatest(F.col("ead"), F.lit(1.0)), 5),
+        )
+        .withColumn(
+            "npl_ratio", F.round(F.col("npl_balance") / F.greatest(F.col("ead"), F.lit(1.0)), 4)
+        )
         # Cobertura: quanto da carteira problematica ja esta provisionado.
         .withColumn(
             "coverage_ratio",
             F.round(F.col("provision_amount") / F.greatest(F.col("npl_balance"), F.lit(1.0)), 4),
         )
-        .withColumn("net_recovery_rate",
-                    F.round(F.col("recovery_amount")
-                            / F.greatest(F.col("written_off_balance"), F.lit(1.0)), 4))
+        .withColumn(
+            "net_recovery_rate",
+            F.round(
+                F.col("recovery_amount") / F.greatest(F.col("written_off_balance"), F.lit(1.0)), 4
+            ),
+        )
         # Sinalizacao para o comite de credito.
         .withColumn(
             "portfolio_alert",
             F.when(F.col("pd_observed") >= 0.25, "safra_critica")
-             .when(F.col("pd_observed") >= 0.15, "safra_em_deterioracao")
-             .when(F.col("coverage_ratio") < 0.6, "subprovisionada")
-             .otherwise("dentro_do_esperado"),
+            .when(F.col("pd_observed") >= 0.15, "safra_em_deterioracao")
+            .when(F.col("coverage_ratio") < 0.6, "subprovisionada")
+            .otherwise("dentro_do_esperado"),
         )
         .withColumn("reference_date", F.lit(cfg.data_generation["end_date"]).cast("date"))
         .withColumn("_gold_processed_at", F.current_timestamp())
@@ -143,22 +165,35 @@ def run() -> int:
         gold = build(spark)
         path = cfg.table_path("gold", TABLE)
 
-        write_delta(gold, path, mode="overwrite", partition_by=["product"],
-                    overwrite_schema=True,
-                    comment="silver.credit_contracts -> gold.credit_risk_portfolio")
+        write_delta(
+            gold,
+            path,
+            mode="overwrite",
+            partition_by=["product"],
+            overwrite_schema=True,
+            comment="silver.credit_contracts -> gold.credit_risk_portfolio",
+        )
         register_table(spark, cfg.full_table_name("gold", TABLE), path)
 
         result = spark.read.format("delta").load(path)
         dq.run_quality_checks(
-            spark, result, dataset=f"gold.{TABLE}",
+            spark,
+            result,
+            dataset=f"gold.{TABLE}",
             expectations=[
                 dq.not_null("vintage"),
                 dq.between("pd_observed", 0.0, 1.0),
                 dq.between("lgd_assumption", 0.0, 1.0),
                 dq.between("expected_loss_rate", 0.0, 1.0),
-                dq.allowed_values("portfolio_alert",
-                                  ["dentro_do_esperado", "subprovisionada",
-                                   "safra_em_deterioracao", "safra_critica"]),
+                dq.allowed_values(
+                    "portfolio_alert",
+                    [
+                        "dentro_do_esperado",
+                        "subprovisionada",
+                        "safra_em_deterioracao",
+                        "safra_critica",
+                    ],
+                ),
                 dq.row_count_min(1),
             ],
         )
@@ -168,8 +203,13 @@ def run() -> int:
             F.round(F.sum("expected_loss"), 2).alias("expected_loss"),
             F.round(F.sum("npl_balance") / F.sum("ead"), 4).alias("npl_ratio"),
         ).collect()[0]
-        log.info("gold.%s: EAD=R$ %s | perda esperada=R$ %s | NPL=%.2f%%", TABLE,
-                 totals["ead"], totals["expected_loss"], (totals["npl_ratio"] or 0) * 100)
+        log.info(
+            "gold.%s: EAD=R$ %s | perda esperada=R$ %s | NPL=%.2f%%",
+            TABLE,
+            totals["ead"],
+            totals["expected_loss"],
+            (totals["npl_ratio"] or 0) * 100,
+        )
         return result.count()
 
 

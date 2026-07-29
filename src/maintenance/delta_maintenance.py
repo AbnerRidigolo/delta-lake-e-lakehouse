@@ -30,7 +30,6 @@ Execucao:
 from __future__ import annotations
 
 import argparse
-from typing import Dict, List, Optional, Tuple
 
 from src.common.config import get_settings
 from src.common.delta_io import table_exists
@@ -41,7 +40,7 @@ log = get_logger(__name__)
 
 # (camada, tabela, colunas de Z-ORDER)
 # As colunas foram escolhidas a partir dos filtros reais dos jobs a jusante.
-MAINTENANCE_PLAN: List[Tuple[str, str, Optional[List[str]]]] = [
+MAINTENANCE_PLAN: list[tuple[str, str, list[str] | None]] = [
     ("bronze", "transactions", None),
     ("silver", "transactions", ["customer_id", "merchant_id"]),
     ("silver", "credit_contracts", ["customer_id", "product"]),
@@ -64,7 +63,7 @@ MAINTENANCE_PLAN: List[Tuple[str, str, Optional[List[str]]]] = [
 ]
 
 
-def optimize_table(spark, path: str, zorder_columns: Optional[List[str]]) -> Dict:
+def optimize_table(spark, path: str, zorder_columns: list[str] | None) -> dict:
     """Roda OPTIMIZE (com Z-ORDER quando aplicavel) e devolve as metricas."""
     statement = f"OPTIMIZE delta.`{path}`"
     if zorder_columns:
@@ -91,7 +90,7 @@ def vacuum_table(spark, path: str, retention_hours: int) -> None:
     spark.sql(f"VACUUM delta.`{path}` RETAIN {retention_hours} HOURS")
 
 
-def table_stats(spark, path: str) -> Dict:
+def table_stats(spark, path: str) -> dict:
     """Estatisticas fisicas da tabela (arquivos, tamanho, versao atual)."""
     detail = spark.sql(f"DESCRIBE DETAIL delta.`{path}`").collect()[0].asDict()
     return {
@@ -101,11 +100,11 @@ def table_stats(spark, path: str) -> Dict:
     }
 
 
-def run(vacuum: bool = False, retention_hours: int = 168) -> Dict[str, Dict]:
+def run(vacuum: bool = False, retention_hours: int = 168) -> dict[str, dict]:
     """Executa o plano de manutencao em todas as tabelas materializadas."""
     cfg = get_settings()
     spark = get_spark("delta_maintenance")
-    report: Dict[str, Dict] = {}
+    report: dict[str, dict] = {}
 
     with log_stage(log, "maintenance.delta"):
         for layer, table, zorder in MAINTENANCE_PLAN:
@@ -125,23 +124,37 @@ def run(vacuum: bool = False, retention_hours: int = 168) -> Dict[str, Dict]:
                 after = table_stats(spark, path)
 
             report[name] = {"antes": before, "depois": after, "zorder": zorder or []}
-            log.info("%-38s | arquivos %s -> %s | %s MB | zorder=%s", name,
-                     before["arquivos"], after["arquivos"], after["tamanho_mb"],
-                     ", ".join(zorder or []) or "-")
+            log.info(
+                "%-38s | arquivos %s -> %s | %s MB | zorder=%s",
+                name,
+                before["arquivos"],
+                after["arquivos"],
+                after["tamanho_mb"],
+                ", ".join(zorder or []) or "-",
+            )
 
         total_before = sum(r["antes"]["arquivos"] or 0 for r in report.values())
         total_after = sum(r["depois"]["arquivos"] or 0 for r in report.values())
-        log.info("Compactacao total: %s -> %s arquivos (%s tabelas)",
-                 total_before, total_after, len(report))
+        log.info(
+            "Compactacao total: %s -> %s arquivos (%s tabelas)",
+            total_before,
+            total_after,
+            len(report),
+        )
     return report
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Manutencao das tabelas Delta.")
-    parser.add_argument("--vacuum", action="store_true",
-                        help="tambem remove arquivos fora da janela de retencao")
-    parser.add_argument("--retention-hours", type=int, default=168,
-                        help="janela de retencao do VACUUM em horas (padrao: 168 = 7 dias)")
+    parser.add_argument(
+        "--vacuum", action="store_true", help="tambem remove arquivos fora da janela de retencao"
+    )
+    parser.add_argument(
+        "--retention-hours",
+        type=int,
+        default=168,
+        help="janela de retencao do VACUUM em horas (padrao: 168 = 7 dias)",
+    )
     args = parser.parse_args()
     run(vacuum=args.vacuum, retention_hours=args.retention_hours)
 

@@ -1,0 +1,44 @@
+# ===========================================================================
+# Perfil CI - overlay sobre `config/settings.yaml`
+#
+# Ativado por `LAKEHOUSE_PROFILE=ci`. Declara APENAS o que muda em relacao a
+# configuracao base; tudo o mais e herdado (ver `_deep_merge` em config.py).
+#
+# Objetivo: rodar o pipeline INTEIRO - todas as 20 etapas, todas as regras de
+# qualidade - em ~2 minutos, com um dataset pequeno. Um CI que testa um caminho
+# diferente do de producao nao testa nada; por isso o que muda aqui e so o
+# VOLUME, nunca a logica.
+# ===========================================================================
+
+project:
+  environment: "ci"
+
+spark:
+  # Runners do GitHub Actions tem 2 vCPUs e ~7 GB de RAM.
+  master: "local[2]"
+  driver_memory: "2g"
+  shuffle_partitions: 4
+
+data_generation:
+  # ~2% do volume de producao: suficiente para exercitar todas as regras,
+  # rapido o bastante para rodar em cada push.
+  n_customers: 400
+  n_merchants: 60
+  n_transactions: 12000
+  n_credit_contracts: 500
+  streaming_batches: 3
+  streaming_events_per_batch: 200
+
+ml:
+  # Menos dados exigem uma proporcao de teste maior para o conjunto de
+  # avaliacao ainda conter fraudes suficientes.
+  test_size: 0.30
+
+ai:
+  # Poucos documentos -> a dimensao efetiva do SVD e limitada pelo corpus.
+  embedding_dim: 64
+
+quality:
+  # No CI a base historica e sempre nova, entao o baseline de drift de volume
+  # nao existe: a checagem vira aviso em vez de bloqueio.
+  volume_drift_severity: "warn"

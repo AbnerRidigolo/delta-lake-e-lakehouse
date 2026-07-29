@@ -95,6 +95,34 @@ ml:
   # Colunas que NAO podem entrar no modelo (vazamento ou identificadores)
   leakage_columns: ["transaction_id", "customer_id", "merchant_id", "event_ts", "fraud_score_rule"]
 
+# --- Qualidade de dados avancada ------------------------------------------
+quality:
+  # Diretorio dos contratos de schema congelados (versionados no Git).
+  contracts_dir: "contracts"
+  # Variacao maxima tolerada no volume de uma tabela contra a mediana historica
+  # das ultimas execucoes. Acima disso, algo mudou na origem e alguem precisa
+  # olhar (arquivo truncado, backfill inesperado, join explodindo).
+  volume_drift_max_deviation: 0.35
+  volume_drift_min_history: 3
+  volume_drift_severity: "error"
+  # Conciliacao entre camadas: divergencia maxima aceita ao somar
+  # (validos + quarentena) contra o total da camada anterior.
+  reconciliation_tolerance: 0.0
+  # Tolerancia da conciliacao financeira (centavos acumulam arredondamento).
+  reconciliation_amount_tolerance: 0.01
+  # PSI (Population Stability Index) - padrao de mercado em risco de credito:
+  #   < 0.10  estavel | 0.10-0.25  atencao | > 0.25  drift relevante
+  psi_warn_threshold: 0.10
+  psi_error_threshold: 0.25
+  psi_buckets: 10
+  # Uma feature isolada com PSI alto e comum e nao justifica parar o pipeline:
+  # a populacao muda, a base amadurece, a sazonalidade existe. VARIAS features
+  # deslocando ao mesmo tempo e outra coisa - indica mudanca estrutural na
+  # origem ou defeito no pipeline. O bloqueio acompanha essa distincao.
+  psi_max_drifting_features: 2
+  # Nota minima do scorecard para o pipeline ser considerado aprovado (0-100).
+  scorecard_min_score: 90.0
+
 # --- Camada de IA generativa / RAG ----------------------------------------
 ai:
   # Embeddings locais (TF-IDF + SVD) para o projeto rodar sem chave de API.

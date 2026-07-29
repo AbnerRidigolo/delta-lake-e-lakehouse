@@ -1,0 +1,56 @@
+[project]
+name = "neopag-lakehouse"
+version = "1.0.0"
+description = "Data Lakehouse com Delta Lake para uma fintech: Medallion, Feature Store, ML e RAG"
+requires-python = ">=3.10"
+
+# ---------------------------------------------------------------------------
+# Ruff - linter e formatador
+# ---------------------------------------------------------------------------
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+extend-exclude = [".venv", "data", "data-ci", "artifacts", "reports", ".ivy2"]
+
+[tool.ruff.lint]
+# E/W  pycodestyle      - estilo
+# F    pyflakes         - erros reais (variavel indefinida, import nao usado)
+# I    isort            - ordenacao de imports
+# B    flake8-bugbear   - armadilhas comuns (mutavel como default, etc.)
+# UP   pyupgrade        - sintaxe moderna
+# C4   comprehensions   - comprehensions desnecessarias
+select = ["E", "W", "F", "I", "B", "UP", "C4"]
+ignore = [
+    # Jobs Spark encadeiam muita expressao; a linha longa ocasional e mais
+    # legivel do que a quebra forcada no meio de um `withColumn`.
+    "E501",
+    # `zip()` sem `strict=` e proposital: as sequencias tem tamanhos conhecidos.
+    "B905",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Notebooks do Databricks tem imports depois de codigo por construcao (as
+# celulas sao executadas em ordem, nao o arquivo inteiro).
+"notebooks/*" = ["E402", "F401"]
+# O DAG do Airflow precisa ajustar o sys.path antes de importar o projeto.
+"orchestration/airflow/dags/*" = ["E402"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["src", "orchestration"]
+
+# ---------------------------------------------------------------------------
+# Pytest
+# ---------------------------------------------------------------------------
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+addopts = "-v --strict-markers --durations=10"
+markers = [
+    "spark: teste que precisa de uma SparkSession (mais lento)",
+    "integration: teste que precisa das tabelas materializadas pelo pipeline",
+]
+# Silencia avisos de bibliotecas de terceiros que nao controlamos.
+filterwarnings = [
+    "ignore::DeprecationWarning:pyspark.*",
+    "ignore::FutureWarning:pandas.*",
+]

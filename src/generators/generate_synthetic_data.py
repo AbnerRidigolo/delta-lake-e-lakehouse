@@ -41,11 +41,11 @@ import json
 import math
 import random
 import shutil
-from bisect import bisect
-from dataclasses import dataclass, field
+from collections.abc import Sequence
+from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from pathlib import Path
-from typing import Any, Dict, List, Sequence, Tuple
+from typing import Any
 
 from src.common.config import get_settings
 from src.common.logging_utils import get_logger, log_stage
@@ -63,10 +63,10 @@ WRITE_OFF_DPD = 180
 # Existem para evitar que features triviais separem fraude de forma perfeita.
 # Um dataset sintetico "limpo demais" produz um modelo com 100% de recall que
 # nao significa absolutamente nada.
-SESSION_RATE = 0.07       # chance de a compra virar uma sessao de varias compras
+SESSION_RATE = 0.07  # chance de a compra virar uma sessao de varias compras
 LONG_SESSION_RATE = 0.18  # dentro das sessoes, chance de ser uma sessao longa
-RETRY_RATE = 0.45         # chance de retentativa apos uma recusa
-NEW_DEVICE_RATE = 0.045   # chance de o cliente usar um aparelho novo
+RETRY_RATE = 0.45  # chance de retentativa apos uma recusa
+NEW_DEVICE_RATE = 0.045  # chance de o cliente usar um aparelho novo
 
 # Nem toda fraude e descoberta. Esta fracao das transacoes fraudulentas fica
 # rotulada como legitima - o cliente nao contestou, a analise nao pegou. Rotulo
@@ -79,7 +79,8 @@ UNREPORTED_FRAUD_RATE = 0.08
 # Utilitarios de amostragem
 # ===========================================================================
 
-def weighted_pick(rng: random.Random, options: Sequence[Tuple[Any, float]]) -> Any:
+
+def weighted_pick(rng: random.Random, options: Sequence[tuple[Any, float]]) -> Any:
     """Escolhe um item de [(valor, peso), ...]."""
     values = [o[0] for o in options]
     weights = [o[1] for o in options]
@@ -108,8 +109,30 @@ def business_hour(rng: random.Random) -> int:
     """Distribuicao horaria tipica de consumo (picos no almoco e a noite)."""
     hours = list(range(24))
     weights = [
-        0.6, 0.4, 0.3, 0.2, 0.2, 0.4, 1.0, 2.2, 3.4, 4.0, 4.6, 5.6,
-        6.4, 5.4, 4.8, 4.6, 4.8, 5.6, 6.6, 6.8, 5.8, 4.4, 2.8, 1.4,
+        0.6,
+        0.4,
+        0.3,
+        0.2,
+        0.2,
+        0.4,
+        1.0,
+        2.2,
+        3.4,
+        4.0,
+        4.6,
+        5.6,
+        6.4,
+        5.4,
+        4.8,
+        4.6,
+        4.8,
+        5.6,
+        6.6,
+        6.8,
+        5.8,
+        4.4,
+        2.8,
+        1.4,
     ]
     return rng.choices(hours, weights=weights, k=1)[0]
 
@@ -117,6 +140,7 @@ def business_hour(rng: random.Random) -> int:
 # ===========================================================================
 # Perfis comportamentais
 # ===========================================================================
+
 
 @dataclass
 class CustomerProfile:
@@ -129,23 +153,25 @@ class CustomerProfile:
     city: str
     state: str
     signup_date: date
-    devices: List[str]
-    spend_factor: float          # multiplicador do ticket medio do merchant
-    activity: float              # peso relativo de frequencia transacional
-    preferred_channels: List[Tuple[str, float]]
-    churn_date: date | None      # a partir daqui o cliente para de transacionar
-    fraud_victim: bool           # sera alvo de um episodio de fraude
+    devices: list[str]
+    spend_factor: float  # multiplicador do ticket medio do merchant
+    activity: float  # peso relativo de frequencia transacional
+    preferred_channels: list[tuple[str, float]]
+    churn_date: date | None  # a partir daqui o cliente para de transacionar
+    fraud_victim: bool  # sera alvo de um episodio de fraude
 
 
 # ===========================================================================
 # 1) Clientes
 # ===========================================================================
 
-def build_customers(rng: random.Random, n: int, start: date, end: date
-                    ) -> Tuple[List[Dict[str, Any]], List[CustomerProfile]]:
+
+def build_customers(
+    rng: random.Random, n: int, start: date, end: date
+) -> tuple[list[dict[str, Any]], list[CustomerProfile]]:
     """Gera o cadastro de clientes e os perfis comportamentais correspondentes."""
-    rows: List[Dict[str, Any]] = []
-    profiles: List[CustomerProfile] = []
+    rows: list[dict[str, Any]] = []
+    profiles: list[CustomerProfile] = []
 
     city_options = [((c, uf, reg), w) for c, uf, reg, w in ref.CITIES]
     segment_options = [(s, w) for s, w, _, _ in ref.SEGMENTS]
@@ -191,34 +217,36 @@ def build_customers(rng: random.Random, n: int, start: date, end: date
         profiles.append(profile)
 
         first, last = rng.choice(ref.FIRST_NAMES), rng.choice(ref.LAST_NAMES)
-        rows.append({
-            "customer_id": customer_id,
-            "full_name": f"{first} {last}",
-            # CPF sintetico: digitos aleatorios apenas no formato brasileiro.
-            "cpf": f"{rng.randint(0, 999):03d}.{rng.randint(0, 999):03d}."
-                   f"{rng.randint(0, 999):03d}-{rng.randint(0, 99):02d}",
-            "email": f"{first.lower()}.{last.lower()}{rng.randint(1, 9999)}@exemplo.com.br",
-            "phone": f"+55{rng.choice(['11', '21', '31', '41', '51', '71', '81'])}"
-                     f"9{rng.randint(10_000_000, 99_999_999)}",
-            "birth_date": birth.isoformat(),
-            "city": city,
-            "state": state,
-            "region": region,
-            "country": "BR",
-            "signup_date": signup.isoformat(),
-            "acquisition_channel": weighted_pick(rng, ref.ACQUISITION_CHANNELS),
-            "segment": segment,
-            "monthly_income": f"{income:.2f}",
-            "credit_limit": f"{round(income * rng.uniform(0.4, 2.8), 2):.2f}",
-            "risk_band": risk_band,
-            "status": "active" if churn_date is None else "inactive",
-            "source_extracted_at": datetime.combine(end, datetime.min.time()).isoformat(),
-        })
+        rows.append(
+            {
+                "customer_id": customer_id,
+                "full_name": f"{first} {last}",
+                # CPF sintetico: digitos aleatorios apenas no formato brasileiro.
+                "cpf": f"{rng.randint(0, 999):03d}.{rng.randint(0, 999):03d}."
+                f"{rng.randint(0, 999):03d}-{rng.randint(0, 99):02d}",
+                "email": f"{first.lower()}.{last.lower()}{rng.randint(1, 9999)}@exemplo.com.br",
+                "phone": f"+55{rng.choice(['11', '21', '31', '41', '51', '71', '81'])}"
+                f"9{rng.randint(10_000_000, 99_999_999)}",
+                "birth_date": birth.isoformat(),
+                "city": city,
+                "state": state,
+                "region": region,
+                "country": "BR",
+                "signup_date": signup.isoformat(),
+                "acquisition_channel": weighted_pick(rng, ref.ACQUISITION_CHANNELS),
+                "segment": segment,
+                "monthly_income": f"{income:.2f}",
+                "credit_limit": f"{round(income * rng.uniform(0.4, 2.8), 2):.2f}",
+                "risk_band": risk_band,
+                "status": "active" if churn_date is None else "inactive",
+                "source_extracted_at": datetime.combine(end, datetime.min.time()).isoformat(),
+            }
+        )
 
     return rows, profiles
 
 
-def _channel_preferences(rng: random.Random, segment: str) -> List[Tuple[str, float]]:
+def _channel_preferences(rng: random.Random, segment: str) -> list[tuple[str, float]]:
     """Ajusta os pesos de canal conforme o segmento do cliente."""
     prefs = []
     for channel, weight, _methods in ref.CHANNELS:
@@ -235,9 +263,10 @@ def _channel_preferences(rng: random.Random, segment: str) -> List[Tuple[str, fl
 # 2) Estabelecimentos (merchants)
 # ===========================================================================
 
-def build_merchants(rng: random.Random, n: int, start: date, end: date) -> List[Dict[str, Any]]:
+
+def build_merchants(rng: random.Random, n: int, start: date, end: date) -> list[dict[str, Any]]:
     """Gera o cadastro de estabelecimentos com MCC, ticket medio e risco."""
-    rows: List[Dict[str, Any]] = []
+    rows: list[dict[str, Any]] = []
     mcc_options = [((mcc, cat, ticket, risk), w) for mcc, cat, w, ticket, risk in ref.MCC_CATALOG]
     city_options = [((c, uf, reg), w) for c, uf, reg, w in ref.CITIES]
 
@@ -264,27 +293,31 @@ def build_merchants(rng: random.Random, n: int, start: date, end: date) -> List[
             score_noise = rng.uniform(1.0, 3.0)
         risk_score = round(min(base_risk * rng.uniform(0.7, 1.5) + score_noise, 10.0), 2)
 
-        rows.append({
-            "merchant_id": f"MERC-{i:05d}",
-            "merchant_name": f"{rng.choice(ref.MERCHANT_NAME_PREFIX)} "
-                             f"{rng.choice(ref.MERCHANT_NAME_SUFFIX)} {i:03d}",
-            "legal_name": f"{rng.choice(ref.MERCHANT_NAME_SUFFIX).upper()} COMERCIO LTDA",
-            "mcc": mcc,
-            "category": category,
-            "city": city,
-            "state": state,
-            "region": region,
-            "country": "BR",
-            "onboarding_date": random_date(rng, start - timedelta(days=900), end).isoformat(),
-            "avg_ticket": f"{avg_ticket:.2f}",
-            "risk_score": f"{risk_score:.2f}",
-            "risk_flag": "high" if risk_score >= 4.0 else ("medium" if risk_score >= 2.0 else "low"),
-            # MDR = taxa cobrada do lojista; e a principal receita de adquirencia.
-            "mdr_rate": f"{round(rng.uniform(0.009, 0.039), 4):.4f}",
-            "is_active": "true" if rng.random() > 0.06 else "false",
-            "source_extracted_at": datetime.combine(end, datetime.min.time()).isoformat(),
-            "_colluding": "true" if is_colluding else "false",
-        })
+        rows.append(
+            {
+                "merchant_id": f"MERC-{i:05d}",
+                "merchant_name": f"{rng.choice(ref.MERCHANT_NAME_PREFIX)} "
+                f"{rng.choice(ref.MERCHANT_NAME_SUFFIX)} {i:03d}",
+                "legal_name": f"{rng.choice(ref.MERCHANT_NAME_SUFFIX).upper()} COMERCIO LTDA",
+                "mcc": mcc,
+                "category": category,
+                "city": city,
+                "state": state,
+                "region": region,
+                "country": "BR",
+                "onboarding_date": random_date(rng, start - timedelta(days=900), end).isoformat(),
+                "avg_ticket": f"{avg_ticket:.2f}",
+                "risk_score": f"{risk_score:.2f}",
+                "risk_flag": "high"
+                if risk_score >= 4.0
+                else ("medium" if risk_score >= 2.0 else "low"),
+                # MDR = taxa cobrada do lojista; e a principal receita de adquirencia.
+                "mdr_rate": f"{round(rng.uniform(0.009, 0.039), 4):.4f}",
+                "is_active": "true" if rng.random() > 0.06 else "false",
+                "source_extracted_at": datetime.combine(end, datetime.min.time()).isoformat(),
+                "_colluding": "true" if is_colluding else "false",
+            }
+        )
     return rows
 
 
@@ -292,28 +325,41 @@ def build_merchants(rng: random.Random, n: int, start: date, end: date) -> List[
 # 3) Transacoes (o coracao do dataset)
 # ===========================================================================
 
+
 def build_transactions(
     rng: random.Random,
-    profiles: List[CustomerProfile],
-    merchants: List[Dict[str, Any]],
+    profiles: list[CustomerProfile],
+    merchants: list[dict[str, Any]],
     n_transactions: int,
     fraud_rate: float,
     start: date,
     end: date,
-) -> List[Dict[str, Any]]:
+) -> list[dict[str, Any]]:
     """Gera o historico transacional legitimo + episodios de fraude."""
     merchant_index = {m["merchant_id"]: m for m in merchants}
-    colluding = [m["merchant_id"] for m in merchants if m["_colluding"] == "true"] or \
-                [merchants[0]["merchant_id"]]
+    colluding = [m["merchant_id"] for m in merchants if m["_colluding"] == "true"] or [
+        merchants[0]["merchant_id"]
+    ]
     merchant_ids = [m["merchant_id"] for m in merchants]
-    risky_merchants = [m["merchant_id"] for m in merchants
-                       if m["category"] in ("eletronicos", "cripto_cambio", "servicos_digitais",
-                                            "apostas_online", "agencia_viagem", "joalheria")]
+    risky_merchants = [
+        m["merchant_id"]
+        for m in merchants
+        if m["category"]
+        in (
+            "eletronicos",
+            "cripto_cambio",
+            "servicos_digitais",
+            "apostas_online",
+            "agencia_viagem",
+            "joalheria",
+        )
+    ]
     # A fraude PREFERE certas categorias, mas nao se restringe a elas. Se todo
     # evento fraudulento caisse em um subconjunto fechado de lojistas, a
     # categoria sozinha entregaria o rotulo.
     ecommerce_merchants = risky_merchants + rng.sample(
-        merchant_ids, k=min(len(merchant_ids), max(len(risky_merchants) // 2, 5)))
+        merchant_ids, k=min(len(merchant_ids), max(len(risky_merchants) // 2, 5))
+    )
     merchant_weights = [1.0 / (1.0 + float(m["avg_ticket"]) ** 0.35) for m in merchants]
 
     n_fraud = int(n_transactions * fraud_rate)
@@ -322,7 +368,7 @@ def build_transactions(
     # entao sorteamos menos eventos-base para o total final bater com o pedido.
     n_base = int(n_legit / (1 + SESSION_RATE * 1.5 + 0.02))
 
-    rows: List[Dict[str, Any]] = []
+    rows: list[dict[str, Any]] = []
     counter = 0
 
     # ---- 3.1 Transacoes legitimas -----------------------------------------
@@ -358,7 +404,9 @@ def build_transactions(
         if rng.random() < 0.88:
             geo_city, geo_state = profile.city, profile.state
         else:
-            geo_city, geo_state, _ = weighted_pick(rng, [((c, uf, r), w) for c, uf, r, w in ref.CITIES])
+            geo_city, geo_state, _ = weighted_pick(
+                rng, [((c, uf, r), w) for c, uf, r, w in ref.CITIES]
+            )
 
         status = _legit_status(rng, profile, amount)
 
@@ -371,13 +419,25 @@ def build_transactions(
         else:
             device = rng.choice(profile.devices)
 
-        rows.append(_transaction_row(
-            counter=counter, event_ts=event_ts, profile=profile, merchant=merchant,
-            amount=amount, channel=channel, payment_method=payment_method,
-            installments=installments, device=device,
-            geo_city=geo_city, geo_state=geo_state, status=status,
-            is_fraud=0, fraud_type="", rng=rng,
-        ))
+        rows.append(
+            _transaction_row(
+                counter=counter,
+                event_ts=event_ts,
+                profile=profile,
+                merchant=merchant,
+                amount=amount,
+                channel=channel,
+                payment_method=payment_method,
+                installments=installments,
+                device=device,
+                geo_city=geo_city,
+                geo_state=geo_state,
+                status=status,
+                is_fraud=0,
+                fraud_type="",
+                rng=rng,
+            )
+        )
 
         # --- Comportamento legitimo de alta frequencia ----------------------
         # Duas situacoes muito comuns geram varias transacoes em poucos minutos
@@ -386,32 +446,48 @@ def build_transactions(
         # velocity precisa ser um sinal util, nao um atalho para o rotulo.
         extra_events = 0
         if status == "declined" and rng.random() < RETRY_RATE:
-            extra_events = rng.randint(1, 2)          # retentativa apos recusa
+            extra_events = rng.randint(1, 2)  # retentativa apos recusa
         elif rng.random() < SESSION_RATE:
             # A cauda longa importa: existem sessoes legitimas com muitas compras
             # em minutos (marketplace com varios vendedores, recarga, assinatura
             # em lote). Sem essa cauda, "velocity alta" separaria fraude de forma
             # perfeita e o modelo aprenderia um artefato do gerador.
-            extra_events = (rng.randint(4, 8) if rng.random() < LONG_SESSION_RATE
-                            else rng.randint(1, 3))
+            extra_events = (
+                rng.randint(4, 8) if rng.random() < LONG_SESSION_RATE else rng.randint(1, 3)
+            )
 
         for k in range(extra_events):
             counter += 1
-            follow_up_merchant = merchant if rng.random() < 0.7 else \
-                merchant_index[rng.choice(merchant_ids)]
-            follow_up_amount = (amount if status == "declined"
-                                else lognormal_amount(rng, float(follow_up_merchant["avg_ticket"])
-                                                      * profile.spend_factor))
-            rows.append(_transaction_row(
-                counter=counter,
-                event_ts=event_ts + timedelta(minutes=rng.randint(1, 9) * (k + 1),
-                                              seconds=rng.randint(0, 59)),
-                profile=profile, merchant=follow_up_merchant, amount=follow_up_amount,
-                channel=channel, payment_method=payment_method, installments=1,
-                device=device, geo_city=geo_city, geo_state=geo_state,
-                status=_legit_status(rng, profile, follow_up_amount),
-                is_fraud=0, fraud_type="", rng=rng,
-            ))
+            follow_up_merchant = (
+                merchant if rng.random() < 0.7 else merchant_index[rng.choice(merchant_ids)]
+            )
+            follow_up_amount = (
+                amount
+                if status == "declined"
+                else lognormal_amount(
+                    rng, float(follow_up_merchant["avg_ticket"]) * profile.spend_factor
+                )
+            )
+            rows.append(
+                _transaction_row(
+                    counter=counter,
+                    event_ts=event_ts
+                    + timedelta(minutes=rng.randint(1, 9) * (k + 1), seconds=rng.randint(0, 59)),
+                    profile=profile,
+                    merchant=follow_up_merchant,
+                    amount=follow_up_amount,
+                    channel=channel,
+                    payment_method=payment_method,
+                    installments=1,
+                    device=device,
+                    geo_city=geo_city,
+                    geo_state=geo_state,
+                    status=_legit_status(rng, profile, follow_up_amount),
+                    is_fraud=0,
+                    fraud_type="",
+                    rng=rng,
+                )
+            )
 
     # ---- 3.2 Episodios de fraude ------------------------------------------
     # Fraude raramente e um evento isolado: e uma sequencia. Por isso geramos
@@ -420,12 +496,26 @@ def build_transactions(
     produced = 0
     while produced < n_fraud:
         victim = rng.choice(victims)
-        pattern = weighted_pick(rng, [("card_testing", 0.30), ("account_takeover", 0.28),
-                                      ("merchant_collusion", 0.20), ("cnp_high_ticket", 0.22)])
+        pattern = weighted_pick(
+            rng,
+            [
+                ("card_testing", 0.30),
+                ("account_takeover", 0.28),
+                ("merchant_collusion", 0.20),
+                ("cnp_high_ticket", 0.22),
+            ],
+        )
         episode = _fraud_episode(
-            rng=rng, profile=victim, pattern=pattern, merchant_index=merchant_index,
-            colluding=colluding, ecommerce_merchants=ecommerce_merchants or merchant_ids,
-            merchant_ids=merchant_ids, start=start, end=end, start_counter=counter,
+            rng=rng,
+            profile=victim,
+            pattern=pattern,
+            merchant_index=merchant_index,
+            colluding=colluding,
+            ecommerce_merchants=ecommerce_merchants or merchant_ids,
+            merchant_ids=merchant_ids,
+            start=start,
+            end=end,
+            start_counter=counter,
         )
         counter += len(episode)
         produced += len(episode)
@@ -445,9 +535,9 @@ def _legit_status(rng: random.Random, profile: CustomerProfile, amount: float) -
     if roll < decline_rate:
         return "declined"
     if roll < decline_rate + 0.004:
-        return "reversed"          # estorno operacional legitimo
+        return "reversed"  # estorno operacional legitimo
     if roll < decline_rate + 0.0045:
-        return "chargeback"        # contestacao nao fraudulenta (produto nao entregue)
+        return "chargeback"  # contestacao nao fraudulenta (produto nao entregue)
     return "approved"
 
 
@@ -455,14 +545,14 @@ def _fraud_episode(
     rng: random.Random,
     profile: CustomerProfile,
     pattern: str,
-    merchant_index: Dict[str, Dict[str, Any]],
-    colluding: List[str],
-    ecommerce_merchants: List[str],
-    merchant_ids: List[str],
+    merchant_index: dict[str, dict[str, Any]],
+    colluding: list[str],
+    ecommerce_merchants: list[str],
+    merchant_ids: list[str],
     start: date,
     end: date,
     start_counter: int,
-) -> List[Dict[str, Any]]:
+) -> list[dict[str, Any]]:
     """Gera uma sequencia de transacoes fraudulentas com assinatura propria.
 
     * `card_testing`      - rajada de valores baixos em minutos, e-commerce, device novo.
@@ -472,7 +562,7 @@ def _fraud_episode(
     """
     window_start = max(start, profile.signup_date)
     base_day = random_date(rng, window_start, end) if end > window_start else window_start
-    rows: List[Dict[str, Any]] = []
+    rows: list[dict[str, Any]] = []
     counter = start_counter
 
     # Fraudador quase sempre usa um dispositivo nunca visto antes.
@@ -481,89 +571,142 @@ def _fraud_episode(
     if pattern == "card_testing":
         size = rng.randint(5, 12)
         base_ts = datetime.combine(base_day, datetime.min.time()) + timedelta(
-            hours=rng.randint(0, 23), minutes=rng.randint(0, 59))
+            hours=rng.randint(0, 23), minutes=rng.randint(0, 59)
+        )
         for k in range(size):
             counter += 1
             merchant = merchant_index[rng.choice(ecommerce_merchants)]
-            rows.append(_transaction_row(
-                counter=counter,
-                event_ts=base_ts + timedelta(seconds=rng.randint(20, 110) * (k + 1)),
-                profile=profile, merchant=merchant,
-                amount=round(rng.uniform(1.0, 24.9), 2),
-                channel="ecommerce", payment_method="credit_card", installments=1,
-                device=fraud_device, geo_city=profile.city, geo_state=profile.state,
-                # Boa parte das tentativas de teste de cartao e recusada.
-                status="declined" if rng.random() < 0.55 else "approved",
-                is_fraud=1, fraud_type=pattern, rng=rng, foreign_ip=True,
-            ))
+            rows.append(
+                _transaction_row(
+                    counter=counter,
+                    event_ts=base_ts + timedelta(seconds=rng.randint(20, 110) * (k + 1)),
+                    profile=profile,
+                    merchant=merchant,
+                    amount=round(rng.uniform(1.0, 24.9), 2),
+                    channel="ecommerce",
+                    payment_method="credit_card",
+                    installments=1,
+                    device=fraud_device,
+                    geo_city=profile.city,
+                    geo_state=profile.state,
+                    # Boa parte das tentativas de teste de cartao e recusada.
+                    status="declined" if rng.random() < 0.55 else "approved",
+                    is_fraud=1,
+                    fraud_type=pattern,
+                    rng=rng,
+                    foreign_ip=True,
+                )
+            )
 
     elif pattern == "account_takeover":
         size = rng.randint(2, 5)
         far_city, far_state, _ = weighted_pick(
-            rng, [((c, uf, r), w) for c, uf, r, w in ref.CITIES if uf != profile.state])
+            rng, [((c, uf, r), w) for c, uf, r, w in ref.CITIES if uf != profile.state]
+        )
         base_ts = datetime.combine(base_day, datetime.min.time()) + timedelta(
-            hours=rng.randint(0, 4), minutes=rng.randint(0, 59))
+            hours=rng.randint(0, 4), minutes=rng.randint(0, 59)
+        )
         for k in range(size):
             counter += 1
             merchant = merchant_index[rng.choice(ecommerce_merchants)]
-            rows.append(_transaction_row(
-                counter=counter, event_ts=base_ts + timedelta(minutes=rng.randint(3, 40) * (k + 1)),
-                profile=profile, merchant=merchant,
-                amount=lognormal_amount(rng, max(profile.income * 0.45, 900.0), sigma=0.5),
-                channel=rng.choice(["ecommerce", "wallet", "pix"]),
-                payment_method=rng.choice(["credit_card", "pix"]),
-                installments=1, device=fraud_device, geo_city=far_city, geo_state=far_state,
-                status=rng.choices(["approved", "chargeback", "declined"], [0.45, 0.40, 0.15])[0],
-                is_fraud=1, fraud_type=pattern, rng=rng, foreign_ip=True,
-            ))
+            rows.append(
+                _transaction_row(
+                    counter=counter,
+                    event_ts=base_ts + timedelta(minutes=rng.randint(3, 40) * (k + 1)),
+                    profile=profile,
+                    merchant=merchant,
+                    amount=lognormal_amount(rng, max(profile.income * 0.45, 900.0), sigma=0.5),
+                    channel=rng.choice(["ecommerce", "wallet", "pix"]),
+                    payment_method=rng.choice(["credit_card", "pix"]),
+                    installments=1,
+                    device=fraud_device,
+                    geo_city=far_city,
+                    geo_state=far_state,
+                    status=rng.choices(["approved", "chargeback", "declined"], [0.45, 0.40, 0.15])[
+                        0
+                    ],
+                    is_fraud=1,
+                    fraud_type=pattern,
+                    rng=rng,
+                    foreign_ip=True,
+                )
+            )
 
     elif pattern == "merchant_collusion":
         size = rng.randint(3, 7)
         merchant = merchant_index[rng.choice(colluding)]
-        for k in range(size):
+        for _ in range(size):
             counter += 1
             day = base_day + timedelta(days=rng.randint(0, 6))
             if day > end:
                 day = end
-            rows.append(_transaction_row(
-                counter=counter,
-                event_ts=datetime.combine(day, datetime.min.time())
-                         + timedelta(hours=rng.randint(8, 23), minutes=rng.randint(0, 59)),
-                profile=profile, merchant=merchant,
-                amount=lognormal_amount(rng, float(merchant["avg_ticket"]) * 3.2, sigma=0.4),
-                channel="pos", payment_method="credit_card",
-                installments=rng.choice([1, 1, 6, 10, 12]),
-                device=rng.choice(profile.devices), geo_city=merchant["city"],
-                geo_state=merchant["state"],
-                status=rng.choices(["approved", "chargeback"], [0.6, 0.4])[0],
-                is_fraud=1, fraud_type=pattern, rng=rng,
-            ))
+            rows.append(
+                _transaction_row(
+                    counter=counter,
+                    event_ts=datetime.combine(day, datetime.min.time())
+                    + timedelta(hours=rng.randint(8, 23), minutes=rng.randint(0, 59)),
+                    profile=profile,
+                    merchant=merchant,
+                    amount=lognormal_amount(rng, float(merchant["avg_ticket"]) * 3.2, sigma=0.4),
+                    channel="pos",
+                    payment_method="credit_card",
+                    installments=rng.choice([1, 1, 6, 10, 12]),
+                    device=rng.choice(profile.devices),
+                    geo_city=merchant["city"],
+                    geo_state=merchant["state"],
+                    status=rng.choices(["approved", "chargeback"], [0.6, 0.4])[0],
+                    is_fraud=1,
+                    fraud_type=pattern,
+                    rng=rng,
+                )
+            )
 
     else:  # cnp_high_ticket - "card not present" de alto valor
         counter += 1
         merchant = merchant_index[rng.choice(ecommerce_merchants)]
-        rows.append(_transaction_row(
-            counter=counter,
-            event_ts=datetime.combine(base_day, datetime.min.time())
-                     + timedelta(hours=rng.choice([1, 2, 3, 4, 23]), minutes=rng.randint(0, 59)),
-            profile=profile, merchant=merchant,
-            amount=lognormal_amount(rng, 6800.0, sigma=0.45),
-            channel="ecommerce", payment_method="credit_card",
-            installments=rng.choice([1, 1, 2, 3]), device=fraud_device,
-            geo_city=profile.city, geo_state=profile.state,
-            status=rng.choices(["approved", "chargeback", "declined"], [0.4, 0.45, 0.15])[0],
-            is_fraud=1, fraud_type="cnp_high_ticket", rng=rng, foreign_ip=True,
-        ))
+        rows.append(
+            _transaction_row(
+                counter=counter,
+                event_ts=datetime.combine(base_day, datetime.min.time())
+                + timedelta(hours=rng.choice([1, 2, 3, 4, 23]), minutes=rng.randint(0, 59)),
+                profile=profile,
+                merchant=merchant,
+                amount=lognormal_amount(rng, 6800.0, sigma=0.45),
+                channel="ecommerce",
+                payment_method="credit_card",
+                installments=rng.choice([1, 1, 2, 3]),
+                device=fraud_device,
+                geo_city=profile.city,
+                geo_state=profile.state,
+                status=rng.choices(["approved", "chargeback", "declined"], [0.4, 0.45, 0.15])[0],
+                is_fraud=1,
+                fraud_type="cnp_high_ticket",
+                rng=rng,
+                foreign_ip=True,
+            )
+        )
 
     return rows
 
 
 def _transaction_row(
-    counter: int, event_ts: datetime, profile: CustomerProfile, merchant: Dict[str, Any],
-    amount: float, channel: str, payment_method: str, installments: int, device: str,
-    geo_city: str, geo_state: str, status: str, is_fraud: int, fraud_type: str,
-    rng: random.Random, foreign_ip: bool = False,
-) -> Dict[str, Any]:
+    counter: int,
+    event_ts: datetime,
+    profile: CustomerProfile,
+    merchant: dict[str, Any],
+    amount: float,
+    channel: str,
+    payment_method: str,
+    installments: int,
+    device: str,
+    geo_city: str,
+    geo_state: str,
+    status: str,
+    is_fraud: int,
+    fraud_type: str,
+    rng: random.Random,
+    foreign_ip: bool = False,
+) -> dict[str, Any]:
     """Monta o registro cru de transacao (todos os campos como texto, como num CSV real)."""
     # Fraude nao confirmada: a transacao aconteceu, mas nunca foi rotulada como
     # fraude (cliente nao contestou / analise nao identificou).
@@ -573,8 +716,10 @@ def _transaction_row(
     if foreign_ip and rng.random() < 0.6:
         ip = f"{rng.randint(2, 223)}.{rng.randint(0, 255)}.{rng.randint(0, 255)}.{rng.randint(1, 254)}"
     else:
-        ip = f"{rng.choice([177, 187, 189, 191, 200, 201])}." \
-             f"{rng.randint(0, 255)}.{rng.randint(0, 255)}.{rng.randint(1, 254)}"
+        ip = (
+            f"{rng.choice([177, 187, 189, 191, 200, 201])}."
+            f"{rng.randint(0, 255)}.{rng.randint(0, 255)}.{rng.randint(1, 254)}"
+        )
 
     return {
         "transaction_id": f"TXN-{counter:09d}",
@@ -602,13 +747,20 @@ def _transaction_row(
 # 4) Contratos de credito
 # ===========================================================================
 
-def build_credit_contracts(rng: random.Random, profiles: List[CustomerProfile],
-                           n_contracts: int, start: date, end: date,
-                           default_dpd: int) -> List[Dict[str, Any]]:
+
+def build_credit_contracts(
+    rng: random.Random,
+    profiles: list[CustomerProfile],
+    n_contracts: int,
+    start: date,
+    end: date,
+    default_dpd: int,
+) -> list[dict[str, Any]]:
     """Gera a carteira de credito com inadimplencia correlacionada ao risco."""
-    rows: List[Dict[str, Any]] = []
-    product_options = [((p, lo, hi, jlo, jhi, terms), w)
-                       for p, w, lo, hi, jlo, jhi, terms in ref.CREDIT_PRODUCTS]
+    rows: list[dict[str, Any]] = []
+    product_options = [
+        ((p, lo, hi, jlo, jhi, terms), w) for p, w, lo, hi, jlo, jhi, terms in ref.CREDIT_PRODUCTS
+    ]
     # Probabilidade base de atraso por faixa de risco (proxy de PD).
     pd_by_band = {"A": 0.018, "B": 0.041, "C": 0.087, "D": 0.163, "E": 0.271}
 
@@ -630,8 +782,11 @@ def build_credit_contracts(rng: random.Random, profiles: List[CustomerProfile],
 
         # Probabilidade de atraso cresce com risco, comprometimento de renda e prazo.
         commitment = (principal / max(term, 1)) / max(profile.income, 500.0)
-        pd = pd_by_band[profile.risk_band] * (1 + 2.2 * min(commitment, 1.2)) * \
-            (1.25 if product in ("cartao_rotativo", "bnpl") else 1.0)
+        pd = (
+            pd_by_band[profile.risk_band]
+            * (1 + 2.2 * min(commitment, 1.2))
+            * (1.25 if product in ("cartao_rotativo", "bnpl") else 1.0)
+        )
         pd = min(pd, 0.85)
 
         if rng.random() < pd:
@@ -656,24 +811,28 @@ def build_credit_contracts(rng: random.Random, profiles: List[CustomerProfile],
             status = "active"
 
         # Parte do que foi para prejuizo retorna via cobranca/recuperacao.
-        recovery = round(outstanding * rng.uniform(0.05, 0.35), 2) if status == "written_off" else 0.0
+        recovery = (
+            round(outstanding * rng.uniform(0.05, 0.35), 2) if status == "written_off" else 0.0
+        )
 
-        rows.append({
-            "contract_id": f"CTR-{i:07d}",
-            "customer_id": profile.customer_id,
-            "product": product,
-            "principal_amount": f"{principal:.2f}",
-            "interest_rate_month": f"{rate:.5f}",
-            "term_months": str(term),
-            "origination_date": origination.isoformat(),
-            "installments_paid": str(installments_paid),
-            "outstanding_balance": f"{outstanding:.2f}",
-            "days_past_due": str(days_past_due),
-            "status": status,
-            "recovery_amount": f"{recovery:.2f}",
-            "collateral": "sim" if product == "consignado" else "nao",
-            "source_extracted_at": datetime.combine(end, datetime.min.time()).isoformat(),
-        })
+        rows.append(
+            {
+                "contract_id": f"CTR-{i:07d}",
+                "customer_id": profile.customer_id,
+                "product": product,
+                "principal_amount": f"{principal:.2f}",
+                "interest_rate_month": f"{rate:.5f}",
+                "term_months": str(term),
+                "origination_date": origination.isoformat(),
+                "installments_paid": str(installments_paid),
+                "outstanding_balance": f"{outstanding:.2f}",
+                "days_past_due": str(days_past_due),
+                "status": status,
+                "recovery_amount": f"{recovery:.2f}",
+                "collateral": "sim" if product == "consignado" else "nao",
+                "source_extracted_at": datetime.combine(end, datetime.min.time()).isoformat(),
+            }
+        )
 
     return rows
 
@@ -682,8 +841,10 @@ def build_credit_contracts(rng: random.Random, profiles: List[CustomerProfile],
 # 5) Injecao de "sujeira" (para a camada Silver ter o que limpar)
 # ===========================================================================
 
-def inject_dirty_records(rng: random.Random, rows: List[Dict[str, Any]],
-                         dirty_rate: float) -> List[Dict[str, Any]]:
+
+def inject_dirty_records(
+    rng: random.Random, rows: list[dict[str, Any]], dirty_rate: float
+) -> list[dict[str, Any]]:
     """Corrompe uma fracao dos registros, imitando problemas reais de origem.
 
     Problemas injetados:
@@ -699,8 +860,12 @@ def inject_dirty_records(rng: random.Random, rows: List[Dict[str, Any]],
     # Cada tabela tem colunas diferentes; descobrimos quais problemas fazem
     # sentido a partir das colunas realmente presentes no registro.
     columns = rows[0].keys()
-    numeric_col = next((c for c in ("amount", "principal_amount", "monthly_income") if c in columns), None)
-    date_col = next((c for c in ("event_ts", "origination_date", "signup_date") if c in columns), None)
+    numeric_col = next(
+        (c for c in ("amount", "principal_amount", "monthly_income") if c in columns), None
+    )
+    date_col = next(
+        (c for c in ("event_ts", "origination_date", "signup_date") if c in columns), None
+    )
     category_col = next((c for c in ("channel", "status", "segment") if c in columns), None)
     # Chave estrangeira so e "orfa" em tabelas-filhas (transacao, contrato).
     has_fk = "customer_id" in columns and ("transaction_id" in columns or "contract_id" in columns)
@@ -717,7 +882,7 @@ def inject_dirty_records(rng: random.Random, rows: List[Dict[str, Any]],
 
     n_dirty = int(len(rows) * dirty_rate)
     indices = rng.sample(range(len(rows)), k=min(n_dirty, len(rows)))
-    duplicates: List[Dict[str, Any]] = []
+    duplicates: list[dict[str, Any]] = []
 
     for idx in indices:
         row = rows[idx]
@@ -736,7 +901,9 @@ def inject_dirty_records(rng: random.Random, rows: List[Dict[str, Any]],
             duplicates.append(dict(row))
 
     rows.extend(duplicates)
-    log.info("Sujeira injetada: %s registros corrompidos, %s duplicatas", len(indices), len(duplicates))
+    log.info(
+        "Sujeira injetada: %s registros corrompidos, %s duplicatas", len(indices), len(duplicates)
+    )
     return rows
 
 
@@ -744,7 +911,8 @@ def inject_dirty_records(rng: random.Random, rows: List[Dict[str, Any]],
 # 6) Escrita dos arquivos
 # ===========================================================================
 
-def write_csv(path: Path, rows: List[Dict[str, Any]], exclude: Sequence[str] = ()) -> None:
+
+def write_csv(path: Path, rows: list[dict[str, Any]], exclude: Sequence[str] = ()) -> None:
     """Escreve uma lista de dicionarios em CSV com cabecalho."""
     path.parent.mkdir(parents=True, exist_ok=True)
     fieldnames = [c for c in rows[0].keys() if c not in exclude]
@@ -755,10 +923,13 @@ def write_csv(path: Path, rows: List[Dict[str, Any]], exclude: Sequence[str] = (
     log.info("CSV gravado: %s (%s linhas)", path, len(rows))
 
 
-def split_batch_and_stream(rows: List[Dict[str, Any]], end: date, stream_days: int
-                           ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+def split_batch_and_stream(
+    rows: list[dict[str, Any]], end: date, stream_days: int
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """Separa o historico (batch) dos ultimos dias (que viram eventos de streaming)."""
-    cutoff = (datetime.combine(end, datetime.min.time()) - timedelta(days=stream_days)).isoformat(sep=" ")
+    cutoff = (datetime.combine(end, datetime.min.time()) - timedelta(days=stream_days)).isoformat(
+        sep=" "
+    )
     batch, stream = [], []
     for row in rows:
         # Registros com timestamp corrompido vao para o batch (a Silver os rejeita).
@@ -775,16 +946,16 @@ def _month_bucket(event_ts: str) -> str:
     return f"{parsed.year:04d}-{parsed.month:02d}"
 
 
-def write_transactions_monthly(base_dir: Path, rows: List[Dict[str, Any]]) -> None:
+def write_transactions_monthly(base_dir: Path, rows: list[dict[str, Any]]) -> None:
     """Grava as transacoes em arquivos mensais, como uma extracao real faria."""
-    buckets: Dict[str, List[Dict[str, Any]]] = {}
+    buckets: dict[str, list[dict[str, Any]]] = {}
     for row in rows:
         buckets.setdefault(_month_bucket(row["event_ts"]), []).append(row)
     for month, month_rows in sorted(buckets.items()):
         write_csv(base_dir / f"transactions_{month}.csv", month_rows)
 
 
-def write_streaming_batches(base_dir: Path, rows: List[Dict[str, Any]], n_batches: int) -> None:
+def write_streaming_batches(base_dir: Path, rows: list[dict[str, Any]], n_batches: int) -> None:
     """Grava micro-lotes em JSONL, imitando um topico Kafka despejado no storage.
 
     O job de streaming (`bronze_transactions_stream.py`) le este diretorio com
@@ -798,19 +969,29 @@ def write_streaming_batches(base_dir: Path, rows: List[Dict[str, Any]], n_batche
         batch_id = i // chunk
         target = base_dir / f"events_batch_{batch_id:03d}.json"
         with open(target, "w", encoding="utf-8") as handle:
-            for row in rows[i:i + chunk]:
+            for row in rows[i : i + chunk]:
                 handle.write(json.dumps(row, ensure_ascii=False) + "\n")
-    log.info("Streaming: %s eventos em %s arquivos JSONL -> %s", len(rows),
-             math.ceil(len(rows) / chunk), base_dir)
+    log.info(
+        "Streaming: %s eventos em %s arquivos JSONL -> %s",
+        len(rows),
+        math.ceil(len(rows) / chunk),
+        base_dir,
+    )
 
 
 # ===========================================================================
 # Orquestracao da geracao
 # ===========================================================================
 
-def generate(seed: int | None = None, n_customers: int | None = None,
-             n_merchants: int | None = None, n_transactions: int | None = None,
-             n_contracts: int | None = None, clean: bool = True) -> Dict[str, int]:
+
+def generate(
+    seed: int | None = None,
+    n_customers: int | None = None,
+    n_merchants: int | None = None,
+    n_transactions: int | None = None,
+    n_contracts: int | None = None,
+    clean: bool = True,
+) -> dict[str, int]:
     """Gera todos os datasets brutos. Retorna um resumo com as contagens."""
     cfg = get_settings()
     gen = cfg.data_generation
@@ -837,22 +1018,29 @@ def generate(seed: int | None = None, n_customers: int | None = None,
             log.info("Checkpoint de streaming removido: %s", checkpoint_dir)
 
     with log_stage(log, "gerar clientes"):
-        customers, profiles = build_customers(
-            rng, n_customers or gen["n_customers"], start, end)
+        customers, profiles = build_customers(rng, n_customers or gen["n_customers"], start, end)
 
     with log_stage(log, "gerar merchants"):
         merchants = build_merchants(rng, n_merchants or gen["n_merchants"], start, end)
 
     with log_stage(log, "gerar transacoes"):
         transactions = build_transactions(
-            rng, profiles, merchants,
+            rng,
+            profiles,
+            merchants,
             n_transactions or gen["n_transactions"],
-            float(gen["fraud_rate"]), start, end,
+            float(gen["fraud_rate"]),
+            start,
+            end,
         )
 
     with log_stage(log, "gerar contratos de credito"):
         contracts = build_credit_contracts(
-            rng, profiles, n_contracts or gen["n_credit_contracts"], start, end,
+            rng,
+            profiles,
+            n_contracts or gen["n_credit_contracts"],
+            start,
+            end,
             int(get_settings().business_rules["default_days_past_due"]),
         )
 
@@ -870,8 +1058,9 @@ def generate(seed: int | None = None, n_customers: int | None = None,
 
         batch_rows, stream_rows = split_batch_and_stream(transactions, end, stream_days=7)
         write_transactions_monthly(raw_dir / "transactions", batch_rows)
-        write_streaming_batches(raw_dir / "streaming" / "transactions", stream_rows,
-                                int(gen["streaming_batches"]))
+        write_streaming_batches(
+            raw_dir / "streaming" / "transactions", stream_rows, int(gen["streaming_batches"])
+        )
 
     summary = {
         "customers": len(customers),
@@ -887,19 +1076,26 @@ def generate(seed: int | None = None, n_customers: int | None = None,
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description=f"Gera os dados sinteticos da fintech {BRAND} na camada raw.")
+        description=f"Gera os dados sinteticos da fintech {BRAND} na camada raw."
+    )
     parser.add_argument("--seed", type=int, default=None, help="semente aleatoria")
     parser.add_argument("--customers", type=int, default=None, help="numero de clientes")
     parser.add_argument("--merchants", type=int, default=None, help="numero de estabelecimentos")
     parser.add_argument("--transactions", type=int, default=None, help="numero de transacoes")
-    parser.add_argument("--contracts", type=int, default=None, help="numero de contratos de credito")
-    parser.add_argument("--keep-existing", action="store_true",
-                        help="nao apaga a camada raw antes de gerar")
+    parser.add_argument(
+        "--contracts", type=int, default=None, help="numero de contratos de credito"
+    )
+    parser.add_argument(
+        "--keep-existing", action="store_true", help="nao apaga a camada raw antes de gerar"
+    )
     args = parser.parse_args()
 
     generate(
-        seed=args.seed, n_customers=args.customers, n_merchants=args.merchants,
-        n_transactions=args.transactions, n_contracts=args.contracts,
+        seed=args.seed,
+        n_customers=args.customers,
+        n_merchants=args.merchants,
+        n_transactions=args.transactions,
+        n_contracts=args.contracts,
         clean=not args.keep_existing,
     )
 

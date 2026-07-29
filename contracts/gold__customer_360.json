@@ -1,0 +1,279 @@
+{
+  "table": "gold.customer_360",
+  "frozen_at": "2026-07-29T12:22:14+00:00",
+  "note": "contrato criado automaticamente",
+  "columns": {
+    "customer_id": {
+      "type": "string",
+      "nullable": true
+    },
+    "customer_key": {
+      "type": "string",
+      "nullable": true
+    },
+    "full_name": {
+      "type": "string",
+      "nullable": true
+    },
+    "cpf_masked": {
+      "type": "string",
+      "nullable": true
+    },
+    "email_masked": {
+      "type": "string",
+      "nullable": true
+    },
+    "city": {
+      "type": "string",
+      "nullable": true
+    },
+    "state": {
+      "type": "string",
+      "nullable": true
+    },
+    "region": {
+      "type": "string",
+      "nullable": true
+    },
+    "segment": {
+      "type": "string",
+      "nullable": true
+    },
+    "risk_band": {
+      "type": "string",
+      "nullable": true
+    },
+    "status": {
+      "type": "string",
+      "nullable": true
+    },
+    "age": {
+      "type": "bigint",
+      "nullable": true
+    },
+    "age_band": {
+      "type": "string",
+      "nullable": true
+    },
+    "monthly_income": {
+      "type": "double",
+      "nullable": true
+    },
+    "income_band": {
+      "type": "string",
+      "nullable": true
+    },
+    "credit_limit": {
+      "type": "double",
+      "nullable": true
+    },
+    "limit_to_income_ratio": {
+      "type": "double",
+      "nullable": true
+    },
+    "signup_date": {
+      "type": "date",
+      "nullable": true
+    },
+    "signup_cohort": {
+      "type": "string",
+      "nullable": true
+    },
+    "tenure_days": {
+      "type": "int",
+      "nullable": true
+    },
+    "tenure_band": {
+      "type": "string",
+      "nullable": true
+    },
+    "acquisition_channel": {
+      "type": "string",
+      "nullable": true
+    },
+    "last_transaction_date": {
+      "type": "date",
+      "nullable": true
+    },
+    "first_transaction_date": {
+      "type": "date",
+      "nullable": true
+    },
+    "txn_count_total": {
+      "type": "bigint",
+      "nullable": true
+    },
+    "tpv_total": {
+      "type": "double",
+      "nullable": true
+    },
+    "avg_ticket": {
+      "type": "double",
+      "nullable": true
+    },
+    "median_ticket": {
+      "type": "double",
+      "nullable": true
+    },
+    "stddev_ticket": {
+      "type": "double",
+      "nullable": true
+    },
+    "max_ticket": {
+      "type": "double",
+      "nullable": true
+    },
+    "approval_rate": {
+      "type": "double",
+      "nullable": true
+    },
+    "chargeback_count": {
+      "type": "bigint",
+      "nullable": true
+    },
+    "chargeback_amount": {
+      "type": "double",
+      "nullable": true
+    },
+    "confirmed_fraud_count": {
+      "type": "bigint",
+      "nullable": true
+    },
+    "mdr_revenue_generated": {
+      "type": "double",
+      "nullable": true
+    },
+    "distinct_merchants": {
+      "type": "bigint",
+      "nullable": true
+    },
+    "distinct_devices": {
+      "type": "bigint",
+      "nullable": true
+    },
+    "distinct_states": {
+      "type": "bigint",
+      "nullable": true
+    },
+    "active_days": {
+      "type": "bigint",
+      "nullable": true
+    },
+    "pix_share": {
+      "type": "double",
+      "nullable": true
+    },
+    "card_not_present_share": {
+      "type": "double",
+      "nullable": true
+    },
+    "night_share": {
+      "type": "double",
+      "nullable": true
+    },
+    "weekend_share": {
+      "type": "double",
+      "nullable": true
+    },
+    "txn_count_90d": {
+      "type": "bigint",
+      "nullable": true
+    },
+    "tpv_90d": {
+      "type": "double",
+      "nullable": true
+    },
+    "tpv_30d": {
+      "type": "double",
+      "nullable": true
+    },
+    "credit_contracts_count": {
+      "type": "bigint",
+      "nullable": true
+    },
+    "active_contracts_count": {
+      "type": "bigint",
+      "nullable": true
+    },
+    "credit_principal_total": {
+      "type": "double",
+      "nullable": true
+    },
+    "credit_outstanding_total": {
+      "type": "double",
+      "nullable": true
+    },
+    "credit_provision_total": {
+      "type": "double",
+      "nullable": true
+    },
+    "max_days_past_due": {
+      "type": "int",
+      "nullable": true
+    },
+    "has_npl": {
+      "type": "int",
+      "nullable": true
+    },
+    "has_written_off": {
+      "type": "int",
+      "nullable": true
+    },
+    "credit_recovery_total": {
+      "type": "double",
+      "nullable": true
+    },
+    "max_debt_to_income": {
+      "type": "double",
+      "nullable": true
+    },
+    "monthly_debt_service": {
+      "type": "double",
+      "nullable": true
+    },
+    "days_since_last_transaction": {
+      "type": "int",
+      "nullable": true
+    },
+    "is_churn_risk": {
+      "type": "boolean",
+      "nullable": true
+    },
+    "churn_reason": {
+      "type": "string",
+      "nullable": true
+    },
+    "spend_trend_ratio": {
+      "type": "double",
+      "nullable": true
+    },
+    "total_exposure": {
+      "type": "double",
+      "nullable": true
+    },
+    "limit_utilization": {
+      "type": "double",
+      "nullable": true
+    },
+    "is_delinquent": {
+      "type": "boolean",
+      "nullable": true
+    },
+    "customer_score": {
+      "type": "int",
+      "nullable": true
+    },
+    "rating": {
+      "type": "string",
+      "nullable": true
+    },
+    "value_risk_segment": {
+      "type": "string",
+      "nullable": true
+    },
+    "reference_date": {
+      "type": "date",
+      "nullable": true
+    }
+  }
+}

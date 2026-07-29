@@ -1,0 +1,163 @@
+{
+  "table": "gold.merchant_performance",
+  "frozen_at": "2026-07-29T12:22:14+00:00",
+  "note": "contrato criado automaticamente",
+  "columns": {
+    "merchant_id": {
+      "type": "string",
+      "nullable": true
+    },
+    "event_month": {
+      "type": "string",
+      "nullable": true
+    },
+    "txn_count": {
+      "type": "bigint",
+      "nullable": true
+    },
+    "txn_approved": {
+      "type": "bigint",
+      "nullable": true
+    },
+    "tpv": {
+      "type": "double",
+      "nullable": true
+    },
+    "avg_ticket": {
+      "type": "double",
+      "nullable": true
+    },
+    "mdr_revenue": {
+      "type": "double",
+      "nullable": true
+    },
+    "unique_customers": {
+      "type": "bigint",
+      "nullable": true
+    },
+    "active_days": {
+      "type": "bigint",
+      "nullable": true
+    },
+    "chargeback_count": {
+      "type": "bigint",
+      "nullable": true
+    },
+    "chargeback_amount": {
+      "type": "double",
+      "nullable": true
+    },
+    "fraud_txn_count": {
+      "type": "bigint",
+      "nullable": true
+    },
+    "fraud_amount": {
+      "type": "double",
+      "nullable": true
+    },
+    "cnp_share": {
+      "type": "double",
+      "nullable": true
+    },
+    "night_share": {
+      "type": "double",
+      "nullable": true
+    },
+    "max_ticket": {
+      "type": "double",
+      "nullable": true
+    },
+    "merchant_name": {
+      "type": "string",
+      "nullable": true
+    },
+    "category": {
+      "type": "string",
+      "nullable": true
+    },
+    "mcc": {
+      "type": "string",
+      "nullable": true
+    },
+    "mcc_group": {
+      "type": "string",
+      "nullable": true
+    },
+    "city": {
+      "type": "string",
+      "nullable": true
+    },
+    "state": {
+      "type": "string",
+      "nullable": true
+    },
+    "region": {
+      "type": "string",
+      "nullable": true
+    },
+    "risk_tier": {
+      "type": "string",
+      "nullable": true
+    },
+    "risk_score": {
+      "type": "double",
+      "nullable": true
+    },
+    "mdr_rate": {
+      "type": "double",
+      "nullable": true
+    },
+    "is_new_merchant": {
+      "type": "boolean",
+      "nullable": true
+    },
+    "onboarding_date": {
+      "type": "date",
+      "nullable": true
+    },
+    "approval_rate": {
+      "type": "double",
+      "nullable": true
+    },
+    "chargeback_rate": {
+      "type": "double",
+      "nullable": true
+    },
+    "fraud_rate": {
+      "type": "double",
+      "nullable": true
+    },
+    "fraud_amount_rate": {
+      "type": "double",
+      "nullable": true
+    },
+    "txn_per_customer": {
+      "type": "double",
+      "nullable": true
+    },
+    "revenue_per_customer": {
+      "type": "double",
+      "nullable": true
+    },
+    "tpv_prev_month": {
+      "type": "double",
+      "nullable": true
+    },
+    "tpv_growth": {
+      "type": "double",
+      "nullable": true
+    },
+    "tpv_ma3": {
+      "type": "double",
+      "nullable": true
+    },
+    "merchant_health": {
+      "type": "string",
+      "nullable": true
+    },
+    "is_under_monitoring": {
+      "type": "boolean",
+      "nullable": true
+    }
+  }
+}

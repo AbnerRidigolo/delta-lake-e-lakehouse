@@ -4,6 +4,7 @@
 
 # Dados gerados pelo pipeline (raw/bronze/silver/gold sao reproduzidos por codigo)
 data/
+data-ci/
 !data/.gitkeep
 
 # Artefatos de ML e relatorios gerados
